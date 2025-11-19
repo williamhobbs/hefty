@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools >= 77.0.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hefty"
+version = "0.0.1"
+description = "Some (relatively) lightweight short-term energy forecasting tools for solar, wind, and load."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+  { name="Will Hobbs" },
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "herbie-data[extras] >= 2025.11.2",
+    "pvlib >= 0.13.1",
+]
+license = "BSD-3-Clause"
+license-files = ["LICENSE*"]
+
+[project.urls]
+Homepage = "https://github.com/williamhobbs/hefty"
+Issues = "https://github.com/williamhobbs/hefty/issues"
