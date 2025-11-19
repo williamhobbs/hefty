@@ -3,13 +3,13 @@ Some (relatively) lightweight short-term **e**nergy **f**orecasting **t**ools fo
 
 This repository currently includes solar and wind tools, but may expand one day to include electric load. Forecasts can be created using the NOAA GFS, NOAA GEFS, NOAA HRRR, and ECMWF IFS and AIFS (open data versions) models. 
 
-For solar, look at the notebook [solar_example.ipynb](examples\solar_example.ipynb) for some examples, and [more_solar_examples.ipynb](examples\more_solar_examples.ipynb) for more examples. Both of these convert the resource forecasts to power.
+For solar, look at the notebook [solar_example.ipynb](examples/solar_example.ipynb) for some examples, and [more_solar_examples.ipynb](examples/more_solar_examples.ipynb) for more examples. Both of these convert the resource forecasts to power.
 
-There are also solar ensemble forecasts demonstrated in [ensemble_example.ipynb](examples\ensemble_example.ipynb).
+There are also solar ensemble forecasts demonstrated in [ensemble_example.ipynb](examples/ensemble_example.ipynb).
 
-For wind, look at the notebook [wind_example.ipynb](examples\wind_example.ipynb). The wind tools are not as developed at the solar tools.
+For wind, look at the notebook [wind_example.ipynb](examples/wind_example.ipynb). The wind tools are not as developed at the solar tools.
 
-The [custom.py](src\hefty\custom.py) module is intended to help with getting forecasts of "custom" weather parameters, not necessarily specific to wind or solar, which migh be useful for load forecasting.
+The [custom.py](src/hefty/custom.py) module is intended to help with getting forecasts of "custom" weather parameters, not necessarily specific to wind or solar, which migh be useful for load forecasting.
 
 ## Quick examples
 
