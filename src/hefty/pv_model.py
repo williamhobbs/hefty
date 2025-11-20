@@ -441,8 +441,14 @@ def model_pv_power(
 
     # apply rolling 10-min avg if interval is less than 10 min
     # based on https://www.epri.com/research/products/000000003002018708
-    sample_interval, samples_per_window = pvlib.tools._get_sample_intervals(
-        times=resource_data.index, win_length=10)
+    # sample_interval, samples_per_window = pvlib.tools._get_sample_intervals(
+    #     times=resource_data.index, win_length=10)
+    # based on pvlib.tools._get_sample_intervals, but not exactly the same,
+    # because it doesn't work when there are gaps
+    sample_interval = resource_data.index[1] - resource_data.index[0]
+    sample_interval = sample_interval.seconds / 60  # in minutes
+    win_length = 10
+    samples_per_window = int(win_length / sample_interval)
     if sample_interval < 10:
         N = samples_per_window
         # based on https://stackoverflow.com/a/47490020/27574852
