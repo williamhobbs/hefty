@@ -102,9 +102,6 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         # maximum forecast horizon, update with new lead time
         fxx_max = run_length + lead_time_to_start
 
-        # set forecast lead times
-        fxx_range = range(lead_time_to_start, fxx_max + 1, 3)
-
         # Herbie inputs
         if resource_type == 'solar':
             # solar radiation is not available for f00 (lead_time_to_start=0)
@@ -112,9 +109,9 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
             if lead_time_to_start < 3:
                 lead_time_to_start = 3
                 warnings.warn(
-                        ("You have specified a lead_time_to_start less"
+                        ("You have specified a lead_time_to_start less "
                          "than 3 h. GHI in GEFS is only available "
-                         "starting at F03. The lead_time_to_start has been"
+                         "starting at F03. The lead_time_to_start has been "
                          "changed to 3 h."))
 
             if fxx_max <= 240:
@@ -129,6 +126,9 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
                 '[UV]GRD:80 m above|[UV]GRD:100 m above|'
                 ':TMP:80 m above|PRES:80 m above'
             )
+
+        # set forecast lead times
+        fxx_range = range(lead_time_to_start, fxx_max + 1, 3)
 
     elif model == 'ifs':
         # From https://www.ecmwf.int/en/forecasts/datasets/open-data
