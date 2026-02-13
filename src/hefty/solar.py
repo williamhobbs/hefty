@@ -39,7 +39,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
     model : string, default 'gfs'
         Forecast model. Default is NOAA GFS ('gfs'), but can also be
-        ECMWF IFS ('ifs'), NOAA HRRR ('hrrr'), or NOAA GEFS ('gefs).
+        ECMWF IFS ('ifs'), ECMWF AIFS ('aifs'), NOAA HRRR ('hrrr'),
+        or NOAA GEFS ('gefs).
 
     member: string or int
         For models that are ensembles, pass an appropriate single member label.
@@ -159,8 +160,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             )
         )
     ts = xr.concat(i, dim="valid_time")  # concatenate
-    # rename 'ssrd' to 'sdswrf' in ifs
-    if model == 'ifs':
+    # rename 'ssrd' to 'sdswrf' in ifs/aifs
+    if model == 'ifs' or model == 'aifs':
         ts = ts.rename({'ssrd': 'sdswrf'})
     # convert to dataframe
     df_temp = ts.to_dataframe()[['sdswrf', 't2m', 'si10']]
@@ -231,7 +232,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                         * mixed['sdswrf_prev']) / mixed['int_len'])
             df['ghi'] = unmixed
 
-        elif model == 'ifs':
+        elif model == 'ifs' or model == 'aifs':
             # for ifs ghi: cumulative J/m^s to average W/m^2 over the interval
             # ending at the valid time. calculate difference in measurement
             # over diff in time to get avg J/s/m^2 = W/m^2
@@ -240,7 +241,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         elif model == 'hrrr':
             df['ghi'] = df['sdswrf']
 
-        if model == 'gfs' or model == 'gefs' or model == 'ifs':
+        if model in {'gfs', 'gefs', 'ifs', 'aifs'}:
             # make 1min interval clear sky data covering our time range
             times = pd.date_range(
                 start=df.index[0],
@@ -420,7 +421,8 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
 
     model : string, default 'gfs'
         Forecast model. Default is NOAA GFS ('gfs'), but can also be
-        ECMWF IFS ('ifs'), NOAA HRRR ('hrrr'), or NOAA GEFS ('gefs).
+        ECMWF IFS ('ifs'), ECMWF AIFS ('aifs'), NOAA HRRR ('hrrr'),
+        or NOAA GEFS ('gefs).
 
     member: string or int
         For models that are ensembles, pass an appropriate single member label.
@@ -537,8 +539,8 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             )
         )
     # convert to dataframe
-    # rename 'ssrd' to 'sdswrf' in ifs
-    if model == 'ifs':
+    # rename 'ssrd' to 'sdswrf' in ifs/aifs
+    if model == 'ifs' or model == 'aifs':
         df_temp = i[-1].to_dataframe()[['valid_time', 'ssrd', 't2m', 'si10']]
         df_temp = df_temp.rename(columns={'ssrd': 'sdswrf'})
     else:
@@ -615,7 +617,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                         * mixed['sdswrf_prev']) / mixed['int_len'])
             df['ghi'] = unmixed
 
-        elif model == 'ifs':
+        elif model == 'ifs' or model == 'aifs':
             # for ifs ghi: cumulative J/m^s to average W/m^2 over the interval
             # ending at the valid time. calculate difference in measurement
             # over diff in time to get avg J/s/m^2 = W/m^2
@@ -624,7 +626,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         elif model == 'hrrr':
             df['ghi'] = df['sdswrf']
 
-        if model == 'gfs' or model == 'gefs' or model == 'ifs':
+        if model in {'gfs', 'gefs', 'ifs', 'aifs'}:
             # make 1min interval clear sky data covering our time range
             times = pd.date_range(
                 start=df.index[0],
