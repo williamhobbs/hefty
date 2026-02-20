@@ -69,9 +69,9 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         elif lead_time_to_start > 120:
             fxx_max = round(fxx_max/3)*3
             lead_time_to_start = round(lead_time_to_start/3)*3
-            fxx_range = range(lead_time_to_start, fxx_max, 3)
+            fxx_range = range(lead_time_to_start, fxx_max + 1, 3)
         else:
-            fxx_range = range(lead_time_to_start, fxx_max, 1)
+            fxx_range = range(lead_time_to_start, fxx_max + 1, 1)
 
         # Herbie inputs
         product = 'pgrb2.0p25'
@@ -256,6 +256,14 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         # round down to last actual initialization time
         date = init_date.floor(update_freq)
 
-        fxx_range = range(lead_time_to_start, fxx_max, 1)
+        fxx_range = range(lead_time_to_start, fxx_max + 1, 1)
+
+    elif model == 'cams':
+        product = None
+        search_str = None
+        # maximum forecast horizon
+        fxx_max = run_length + lead_time_to_start
+        fxx_range = range(lead_time_to_start, fxx_max + 1, 1)
+        date = init_date
 
     return date, fxx_range, product, search_str

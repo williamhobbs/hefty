@@ -3,3 +3,4 @@ __pycache__/
 dist/
 .venv/
 *.egg-info
+test*.ipynb
