@@ -228,7 +228,9 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
     model : string, default 'gfs'
         Forecast model. Default is NOAA GFS ('gfs'), but can also be
         ECMWF IFS ('ifs'), ECMWF AIFS ('aifs'), NOAA HRRR ('hrrr'),
-        or NOAA GEFS ('gefs).
+        or NOAA GEFS ('gefs). ECMWF CAMS ('cams') is an experimental
+        option. It requires a CDS API key to be passed via the
+        'cams_api_key' parameter.
 
     member: string or int
         For models that are ensembles, pass an appropriate single member label.
@@ -255,6 +257,15 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         List of model sources to get the data in the order of download
         priority, or string for a single source. See Herbie docs.
         Typical values would be 'aws' or 'google'.
+
+    cams_api_key : string
+        Climate Data Store (CDS) API key, which is required for the 'cams'
+        model option. See https://ads.atmosphere.copernicus.eu/how-to-api.
+
+    cams_area : list, optional
+        List of latitude and logitude coordinates defining the North,
+        South, East, and West corners of the area to be covered. For
+        example, [50, -125, 20, -65] approximately covers CONUS.
 
     Returns
     -------
