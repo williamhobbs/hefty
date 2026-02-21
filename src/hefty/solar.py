@@ -539,7 +539,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             df['ghi'] = df['sdswrf'].diff() / df.index.diff().seconds.values
 
             if model == 'cams':
-                df['ghi_clear'] = (df['ssrdc'].diff() /
+                df['ghi_clear_nwp'] = (df['ssrdc'].diff() /
                                    df.index.diff().seconds.values)
                 df['direct_horiz_clear'] = (df['cdir'].diff() /
                                             df.index.diff().seconds.values)
@@ -548,29 +548,29 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             df['ghi'] = df['sdswrf']
 
         if model in {'gfs', 'gefs', 'ifs', 'aifs', 'cams'}:
-            if model != 'cams':
-                # make 1min interval clear sky data covering our time range
-                times = pd.date_range(
-                    start=df.index[0],
-                    end=df.index[-1],
-                    freq='1min',
-                    tz='UTC')
+            # if model != 'cams':
+            # make 1min interval clear sky data covering our time range
+            times = pd.date_range(
+                start=df.index[0],
+                end=df.index[-1],
+                freq='1min',
+                tz='UTC')
 
-                # calculate clear sky ghi with pvlib
-                cs = loc.get_clearsky(times, model=model_cs)
+            # calculate clear sky ghi with pvlib
+            cs = loc.get_clearsky(times, model=model_cs)
 
-                # calculate average CS ghi over the intervals from the forecast
-                # based on list comprehension example in
-                # https://stackoverflow.com/a/55724134/27574852
-                ghi = cs['ghi']
-                dates = df.index
-                ghi_clear = [
-                    ghi.loc[(ghi.index > dates[i]) & (ghi.index <= dates[i+1])]
-                    .mean() for i in range(len(dates) - 1)
-                    ]
+            # calculate average CS ghi over the intervals from the forecast
+            # based on list comprehension example in
+            # https://stackoverflow.com/a/55724134/27574852
+            ghi = cs['ghi']
+            dates = df.index
+            ghi_clear = [
+                ghi.loc[(ghi.index > dates[i]) & (ghi.index <= dates[i+1])]
+                .mean() for i in range(len(dates) - 1)
+                ]
 
-                # write to df
-                df['ghi_clear'] = [np.nan] + ghi_clear
+            # write to df
+            df['ghi_clear'] = [np.nan] + ghi_clear
 
             # calculate clear sky index of ghi
             df['ghi_csi'] = df['ghi'] / df['ghi_clear']
@@ -602,6 +602,17 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 direction='forward'
             ).set_index('valid_time')
 
+            # clear sky index of the NWP clear sky GHI
+            if model == 'cams':
+                df['ghi_clear_nwp_csi'] = df['ghi_clear_nwp'] / df['ghi_clear']
+                df.loc[df['ghi_clear_nwp_csi'] == 0, 'ghi_csi'] = 0
+                df_60min = pd.merge_asof(
+                    left=df_60min,
+                    right=df['ghi_clear_nwp_csi'],
+                    on='valid_time',
+                    direction='forward'
+                ).set_index('valid_time')
+
             # make 60min interval clear sky, centered at bottom of the hour
             times = pd.date_range(
                 start=df.index[0]+pd.Timedelta('30m'),
@@ -613,6 +624,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # calculate ghi from clear sky and backfilled forecasted clear sky
             # index
             df_60min['ghi'] = cs['ghi'] * df_60min['ghi_csi']
+            df_60min['ghi_clear_nwp'] = (cs['ghi'] *
+                                         df_60min['ghi_clear_nwp_csi'])
 
             # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
             sp = loc.get_solarposition(times)
@@ -626,6 +639,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
             # add clearsky ghi
             df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
+            if model == 'cams':
+                df_60min['ghi_clear'] = df_60min['ghi_clear_nwp']
 
             dfs[j] = df_60min
 
