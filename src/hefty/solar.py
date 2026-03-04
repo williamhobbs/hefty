@@ -540,7 +540,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
             if model == 'cams':
                 df['ghi_clear_nwp'] = (df['ssrdc'].diff() /
-                                   df.index.diff().seconds.values)
+                                       df.index.diff().seconds.values)
                 df['direct_horiz_clear'] = (df['cdir'].diff() /
                                             df.index.diff().seconds.values)
 
@@ -597,7 +597,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # in 3hr version
             df_60min = pd.merge_asof(
                 left=df_60min,
-                right=df.ghi_csi,
+                right=df['ghi_csi'],
                 on='valid_time',
                 direction='forward'
             ).set_index('valid_time')
@@ -624,22 +624,22 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # calculate ghi from clear sky and backfilled forecasted clear sky
             # index
             df_60min['ghi'] = cs['ghi'] * df_60min['ghi_csi']
-            df_60min['ghi_clear_nwp'] = (cs['ghi'] *
-                                         df_60min['ghi_clear_nwp_csi'])
 
             # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
             sp = loc.get_solarposition(times)
             out_erbs = pvlib.irradiance.erbs(
-                df_60min.ghi,
-                sp.zenith,
+                df_60min['ghi'],
+                sp['zenith'],
                 df_60min.index,
             )
-            df_60min['dni'] = out_erbs.dni
-            df_60min['dhi'] = out_erbs.dhi
+            df_60min['dni'] = out_erbs['dni']
+            df_60min['dhi'] = out_erbs['dhi']
 
             # add clearsky ghi
             df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
             if model == 'cams':
+                df_60min['ghi_clear_nwp'] = (cs['ghi'] *
+                                             df_60min['ghi_clear_nwp_csi'])
                 df_60min['ghi_clear'] = df_60min['ghi_clear_nwp']
 
             dfs[j] = df_60min
@@ -682,12 +682,12 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
             sp = loc.get_solarposition(df_60min.index)
             out_erbs = pvlib.irradiance.erbs(
-                df_60min.ghi,
-                sp.zenith,
+                df_60min['ghi'],
+                sp['zenith'],
                 df_60min.index,
             )
-            df_60min['dni'] = out_erbs.dni
-            df_60min['dhi'] = out_erbs.dhi
+            df_60min['dni'] = out_erbs['dni']
+            df_60min['dhi'] = out_erbs['dhi']
 
             # add clearsky ghi
             cs = loc.get_clearsky(df_60min.index, model=model_cs)
@@ -997,7 +997,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             # in 3hr version
             df_60min = pd.merge_asof(
                 left=df_60min,
-                right=df.ghi_csi,
+                right=df['ghi_csi'],
                 on='valid_time',
                 direction='forward'
             ).set_index('valid_time')
@@ -1017,12 +1017,12 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
             sp = loc.get_solarposition(times)
             out_erbs = pvlib.irradiance.erbs(
-                df_60min.ghi,
-                sp.zenith,
+                df_60min['ghi'],
+                sp['zenith'],
                 df_60min.index,
             )
-            df_60min['dni'] = out_erbs.dni
-            df_60min['dhi'] = out_erbs.dhi
+            df_60min['dni'] = out_erbs['dni']
+            df_60min['dhi'] = out_erbs['dhi']
 
             # add clearsky ghi
             df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
@@ -1067,12 +1067,12 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
             sp = loc.get_solarposition(df_60min.index)
             out_erbs = pvlib.irradiance.erbs(
-                df_60min.ghi,
-                sp.zenith,
+                df_60min['ghi'],
+                sp['zenith'],
                 df_60min.index,
             )
-            df_60min['dni'] = out_erbs.dni
-            df_60min['dhi'] = out_erbs.dhi
+            df_60min['dni'] = out_erbs['dni']
+            df_60min['dhi'] = out_erbs['dhi']
 
             # add clearsky ghi
             cs = loc.get_clearsky(df_60min.index, model=model_cs)
@@ -1319,12 +1319,12 @@ def get_solar_forecast_ensemble_subset(
             # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
             sp = loc.get_solarposition(times)
             out_erbs = pvlib.irradiance.erbs(
-                df_60min.ghi,
-                sp.zenith,
+                df_60min['ghi'],
+                sp['zenith'],
                 df_60min.index,
             )
-            df_60min['dni'] = out_erbs.dni
-            df_60min['dhi'] = out_erbs.dhi
+            df_60min['dni'] = out_erbs['dni']
+            df_60min['dhi'] = out_erbs['dhi']
 
             # add clearsky ghi
             df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
@@ -1680,12 +1680,12 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # erbs-driesse
                 sp = loc.get_solarposition(times)
                 out_erbs = pvlib.irradiance.erbs(
-                    df_60min.ghi,
-                    sp.zenith,
+                    df_60min['ghi'],
+                    sp['zenith'],
                     df_60min.index,
                 )
-                df_60min['dni'] = out_erbs.dni
-                df_60min['dhi'] = out_erbs.dhi
+                df_60min['dni'] = out_erbs['dni']
+                df_60min['dhi'] = out_erbs['dhi']
 
                 # add clearsky ghi
                 df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
@@ -1967,12 +1967,12 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # erbs-driesse
                 sp = loc.get_solarposition(times)
                 out_erbs = pvlib.irradiance.erbs(
-                    df_60min.ghi,
-                    sp.zenith,
+                    df_60min['ghi'],
+                    sp['zenith'],
                     df_60min.index,
                 )
-                df_60min['dni'] = out_erbs.dni
-                df_60min['dhi'] = out_erbs.dhi
+                df_60min['dni'] = out_erbs['dni']
+                df_60min['dhi'] = out_erbs['dhi']
 
                 # add clearsky ghi
                 df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
