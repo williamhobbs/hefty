@@ -454,7 +454,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 # direct horiz to dni
                 sp = loc.get_solarposition(df.index)
                 df['dni_clear_nwp'] = (df['direct_horiz_clear'] /
-                                       np.cos(np.deg2rad(sp['zenith'])))
+                                       np.cos(np.deg2rad(sp['apparent_zenith'])))
                 df['dni_clear_nwp_csi'] = df['dni_clear_nwp'] / df['dni_clear']
                 df['ghi_clear_nwp_csi'] = df['ghi_clear_nwp'] / df['ghi_clear']
 
