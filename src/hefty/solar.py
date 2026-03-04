@@ -308,9 +308,9 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             tz=df.index.tz
             )
 
-        if model == 'gfs':
-            # for gfs ghi: we have to "unmix" the rolling average irradiance
-            # that resets every 6 hours
+        if model in {'gfs', 'gefs'}:
+            # for gfs and gefs ghi: we have to "unmix" the rolling average
+            # irradiance that resets every 6 hours
             mixed = df[['sdswrf']].copy()
             mixed['hour'] = mixed.index.hour
             mixed['hour'] = mixed.index.hour
@@ -322,30 +322,10 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             mixed['int_len'] = mixed.index.diff().total_seconds().values / 3600
 
             # set the first interval length:
-            if lead_time_to_start >= 120:
+            if model == 'gfs' and lead_time_to_start >= 120:
                 mixed.loc[mixed.index[0], 'int_len'] = 1
             else:
                 mixed.loc[mixed.index[0], 'int_len'] = 3
-            unmixed = ((mixed['hour_of_mixed_period'] * mixed['sdswrf']
-                        - (mixed['hour_of_mixed_period'] - mixed['int_len'])
-                        * mixed['sdswrf_prev']) / mixed['int_len'])
-            df['ghi'] = unmixed
-
-        elif model == 'gefs':
-            # for gfs ghi: we have to "unmix" the rolling average irradiance
-            # that resets every 6 hours
-            mixed = df[['sdswrf']].copy()
-            mixed['hour'] = mixed.index.hour
-            mixed['hour'] = mixed.index.hour
-            mixed['hour_of_mixed_period'] = ((mixed['hour'] - 1) % 6) + 1
-            mixed['sdswrf_prev'] = mixed['sdswrf'].shift(
-                periods=1,
-                fill_value=0
-                )
-            mixed['int_len'] = mixed.index.diff().total_seconds().values / 3600
-
-            # set the first interval length:
-            mixed.loc[mixed.index[0], 'int_len'] = 3
             unmixed = ((mixed['hour_of_mixed_period'] * mixed['sdswrf']
                         - (mixed['hour_of_mixed_period'] - mixed['int_len'])
                         * mixed['sdswrf_prev']) / mixed['int_len'])
@@ -472,7 +452,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # df['dni_clear_nwp_csi'] = df['dni_clear_nwp'] / df['dni_clear']
             # df['ghi_clear_nwp_csi'] = df['ghi_clear_nwp'] / df['ghi_clear']
 
-            df_60min = df_60min.join(df.drop(['temp_air', 'wind_speed'], axis=1))
+            df_60min = df_60min.join(df.drop(['temp_air', 'wind_speed'],
+                                             axis=1))
 
             df_60min['dhi'] = (df_60min['ghi'] -
                                (df_60min['dni'] *
@@ -735,9 +716,9 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             tz=df.index.tz
             )
 
-        if model == 'gfs':
-            # for gfs ghi: we have to "unmix" the rolling average irradiance
-            # that resets every 6 hours
+        if model in {'gfs', 'gefs'}:
+            # for gfs and gefs ghi: we have to "unmix" the rolling average
+            # irradiance that resets every 6 hours
             mixed = df[['sdswrf']].copy()
             mixed['hour'] = mixed.index.hour
             mixed['hour'] = mixed.index.hour
@@ -749,30 +730,10 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             mixed['int_len'] = mixed.index.diff().total_seconds().values / 3600
 
             # set the first interval length:
-            if lead_time_to_start >= 120:
+            if model == 'gfs' and lead_time_to_start >= 120:
                 mixed.loc[mixed.index[0], 'int_len'] = 1
             else:
                 mixed.loc[mixed.index[0], 'int_len'] = 3
-            unmixed = ((mixed['hour_of_mixed_period'] * mixed['sdswrf']
-                        - (mixed['hour_of_mixed_period'] - mixed['int_len'])
-                        * mixed['sdswrf_prev']) / mixed['int_len'])
-            df['ghi'] = unmixed
-
-        elif model == 'gefs':
-            # for gfs ghi: we have to "unmix" the rolling average irradiance
-            # that resets every 6 hours
-            mixed = df[['sdswrf']].copy()
-            mixed['hour'] = mixed.index.hour
-            mixed['hour'] = mixed.index.hour
-            mixed['hour_of_mixed_period'] = ((mixed['hour'] - 1) % 6) + 1
-            mixed['sdswrf_prev'] = mixed['sdswrf'].shift(
-                periods=1,
-                fill_value=0
-                )
-            mixed['int_len'] = mixed.index.diff().total_seconds().values / 3600
-
-            # set the first interval length:
-            mixed.loc[mixed.index[0], 'int_len'] = 3
             unmixed = ((mixed['hour_of_mixed_period'] * mixed['sdswrf']
                         - (mixed['hour_of_mixed_period'] - mixed['int_len'])
                         * mixed['sdswrf_prev']) / mixed['int_len'])
