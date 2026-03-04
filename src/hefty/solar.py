@@ -444,21 +444,21 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # adjust timestamps to center of interval
             df.index = df.index - pd.Timedelta('30min')
 
-            # direct horiz to dni
+            # direct horiz clear to dni_clear
             sp = loc.get_solarposition(df.index)
             df['dni_clear'] = (df['direct_horiz_clear'] /
                                np.cos(np.deg2rad(sp['apparent_zenith'])))
-            # df['dni_clear_nwp_csi'] = df['dni_clear_nwp'] / df['dni_clear']
-            # df['ghi_clear_nwp_csi'] = df['ghi_clear_nwp'] / df['ghi_clear']
 
             df_60min = df_60min.join(df.drop(['temp_air', 'wind_speed'],
                                              axis=1))
 
+            # calculate dhi from ghi, dni, solar position
             df_60min['dhi'] = (df_60min['ghi'] -
                                (df_60min['dni'] *
                                 np.cos(np.deg2rad(sp['apparent_zenith']))))
+            
+            # clean up dataframe
             df_60min['ghi_clear'] = df_60min['ghi_clear_nwp']
-
             df_60min = df_60min[['temp_air', 'wind_speed', 'ghi', 'dni', 'dhi',
                                  'ghi_clear', 'dni_clear', 'time']]
 
