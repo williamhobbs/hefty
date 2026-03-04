@@ -42,16 +42,15 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         Length of the forecast in hours - number of hours forecasted
 
     lead_time_to_start : int, optional
-        Number of hours between init_date (initialization) and
-        the first forecasted interval. NOAA GFS data goes out
-        384 hours, so run_length + lead_time_to_start must be less
-        than or equal to 384.
+        Number of hours between init_date (initialization) and the first
+        forecasted interval. NOAA GFS data goes out 384 hours, so run_length
+        + lead_time_to_start must be less than or equal to 384.
 
     model : string, default 'gfs'
-        Forecast model. Default is NOAA GFS ('gfs'), but can also be
-        ECMWF IFS ('ifs'), ECMWF AIFS ('aifs'), NOAA HRRR ('hrrr'),
-        or NOAA GEFS ('gefs). ECMWF CAMS ('cams') is an experimental
-        option. It requires a CDS API key to be passed via the
+        Forecast model. Default is NOAA GFS ('gfs'), but can also be ECMWF IFS
+        ('ifs'), ECMWF AIFS ('aifs'), NOAA HRRR ('hrrr'), or NOAA GEFS
+        ('gefs). ECMWF CAMS ('cams') is an experimental option. It requires
+        cdsapi to be installed and a CDS API key to be passed via the
         'cams_api_key' parameter.
 
     member: string or int
@@ -85,9 +84,9 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         model option. See https://ads.atmosphere.copernicus.eu/how-to-api.
 
     cams_area : list, optional
-        List of latitude and logitude coordinates defining the North,
-        South, East, and West corners of the area to be covered. For
-        example, [50, -125, 20, -65] approximately covers CONUS.
+        List of latitude and logitude coordinates defining the North, South,
+        East, and West corners of the area to be covered when using 'cams'.
+        For example, [50, -125, 20, -65] approximately covers CONUS.
 
     Returns
     -------
