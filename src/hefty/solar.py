@@ -221,7 +221,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
         ts = pd.Timestamp(date)
         date_str = ts.strftime('%Y-%m-%d')
-        time = ts.strftime('%H:%M')
+        time_str = ts.strftime('%H:%M')
         filename = (
             f'cams.{ts.strftime('%Y%m%d')}.{ts.strftime('%H')}z.'
             f'{min(fxx_range):0{3}}.{max(fxx_range):0{3}}.grib'
@@ -245,7 +245,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                              'clear_sky_direct_solar_radiation_at_surface',
                              ],
                 'date': [date_str],
-                'time': [time],
+                'time': [time_str],
                 'leadtime_hour': [str(i) for i in fxx_range],
                 'type': ['forecast'],
                 'data_format': 'grib',
