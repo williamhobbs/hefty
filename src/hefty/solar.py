@@ -163,7 +163,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             else:
                 raise ValueError('download failed, ran out of attempts')
 
-            # merge - override avoids hight conflict between 2m temp and 10m wind
+            # merge - override avoids hight conflict between 2m temp and 10m
+            # wind
             ds = xr.merge(ds, compat='override')
             # calculate wind speed from u and v components
             ds = ds.herbie.with_wind('speed')
