@@ -358,6 +358,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             df['ghi'] = df['sdswrf'].diff() / df.index.diff().seconds.values
 
             if model == 'cams':
+                df['dni'] = df['vbdsf'].diff() / df.index.diff().seconds.values
                 df['ghi_clear_nwp'] = (df['ssrdc'].diff() /
                                        df.index.diff().seconds.values)
                 df['direct_horiz_clear'] = (df['cdir'].diff() /
@@ -378,24 +379,43 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # calculate clear sky ghi with pvlib
             cs = loc.get_clearsky(times, model=model_cs)
 
+            if 'dni' not in cs:
+                sp = loc.get_solarposition(times)
+                out_erbs = pvlib.irradiance.erbs(
+                    cs['ghi'],
+                    sp['zenith'],
+                    cs.index,
+                )
+                cs['dni'] = out_erbs['dni']
+
             # calculate average CS ghi over the intervals from the forecast
             # based on list comprehension example in
             # https://stackoverflow.com/a/55724134/27574852
             ghi = cs['ghi']
+            dni = cs['dni']
             dates = df.index
             ghi_clear = [
                 ghi.loc[(ghi.index > dates[i]) & (ghi.index <= dates[i+1])]
                 .mean() for i in range(len(dates) - 1)
                 ]
+            dni_clear = [
+                dni.loc[(dni.index > dates[i]) & (dni.index <= dates[i+1])]
+                .mean() for i in range(len(dates) - 1)
+                ]
 
             # write to df
             df['ghi_clear'] = [np.nan] + ghi_clear
+            df['dni_clear'] = [np.nan] + dni_clear
 
-            # calculate clear sky index of ghi
+            # calculate clear sky index of ghi, dni
             df['ghi_csi'] = df['ghi'] / df['ghi_clear']
 
             # avoid divide by zero issues
             df.loc[df['ghi'] == 0, 'ghi_csi'] = 0
+
+            if model == 'cams':
+                df['dni_csi'] = df['dni'] / df['dni_clear']
+                df.loc[df['dni'] == 0, 'dni_csi'] = 0
 
             # 60min version of data, centered at bottom of the hour
             # 1min interpolation, then 60min mean
@@ -414,20 +434,34 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # "backfill" ghi csi
             # merge based on nearest index from 60min version looking forward
             # in 3hr version
-            df_60min = pd.merge_asof(
-                left=df_60min,
-                right=df['ghi_csi'],
-                on='valid_time',
-                direction='forward'
-            ).set_index('valid_time')
+            if model == 'cams':
+                df_60min = pd.merge_asof(
+                    left=df_60min,
+                    right=df[['ghi_csi', 'dni_csi']],
+                    on='valid_time',
+                    direction='forward'
+                ).set_index('valid_time')
+            else:
+                df_60min = pd.merge_asof(
+                    left=df_60min,
+                    right=df['ghi_csi'],
+                    on='valid_time',
+                    direction='forward'
+                ).set_index('valid_time')
 
             # clear sky index of the NWP clear sky GHI
             if model == 'cams':
+                # direct horiz to dni
+                sp = loc.get_solarposition(df.index)
+                df['dni_clear_nwp'] = (df['direct_horiz_clear'] /
+                                       np.cos(np.deg2rad(sp['zenith'])))
+                df['dni_clear_nwp_csi'] = df['dni_clear_nwp'] / df['dni_clear']
                 df['ghi_clear_nwp_csi'] = df['ghi_clear_nwp'] / df['ghi_clear']
+
                 df.loc[df['ghi_clear_nwp_csi'] == 0, 'ghi_csi'] = 0
                 df_60min = pd.merge_asof(
                     left=df_60min,
-                    right=df['ghi_clear_nwp_csi'],
+                    right=df[['ghi_clear_nwp_csi', 'dni_clear_nwp_csi']],
                     on='valid_time',
                     direction='forward'
                 ).set_index('valid_time')
@@ -439,27 +473,46 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 freq='60min',
                 tz='UTC')
             cs = loc.get_clearsky(times, model=model_cs)
+            if 'dni' not in cs:
+                sp = loc.get_solarposition(times)
+                out_erbs = pvlib.irradiance.erbs(
+                    cs['ghi'],
+                    sp['zenith'],
+                    cs.index,
+                )
+                cs['dni'] = out_erbs['dni']
 
             # calculate ghi from clear sky and backfilled forecasted clear sky
             # index
             df_60min['ghi'] = cs['ghi'] * df_60min['ghi_csi']
 
-            # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
-            sp = loc.get_solarposition(times)
-            out_erbs = pvlib.irradiance.erbs(
-                df_60min['ghi'],
-                sp['zenith'],
-                df_60min.index,
-            )
-            df_60min['dni'] = out_erbs['dni']
-            df_60min['dhi'] = out_erbs['dhi']
+            if model == 'cams':
+                df_60min['dni'] = cs['dni'] * df_60min['dni_csi']
+                df_60min['dhi'] = (df_60min['ghi'] -
+                                   (df_60min['dni'] *
+                                    np.cos(np.deg2rad(sp['apparent_zenith'])))
+                                   )
+            else:
+                # dni and dhi using pvlib erbs. could also DIRINT or
+                # erbs-driesse
+                sp = loc.get_solarposition(times)
+                out_erbs = pvlib.irradiance.erbs(
+                    df_60min['ghi'],
+                    sp['zenith'],
+                    df_60min.index,
+                )
+                df_60min['dni'] = out_erbs['dni']
+                df_60min['dhi'] = out_erbs['dhi']
 
             # add clearsky ghi
             df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
             if model == 'cams':
                 df_60min['ghi_clear_nwp'] = (cs['ghi'] *
                                              df_60min['ghi_clear_nwp_csi'])
+                df_60min['dni_clear_nwp'] = (cs['dni'] *
+                                             df_60min['dni_clear_nwp_csi'])
                 df_60min['ghi_clear'] = df_60min['ghi_clear_nwp']
+                df_60min['dni_clear'] = df_60min['dni_clear_nwp']
 
             dfs[j] = df_60min
 
