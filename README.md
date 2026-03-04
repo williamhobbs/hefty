@@ -1,7 +1,7 @@
 # hEFTy
 Some (relatively) lightweight short-term **e**nergy **f**orecasting **t**ools for solar, wind, and load.
 
-This repository currently includes solar and wind tools, but may expand one day to include electric load. Forecasts can be created using the NOAA GFS, NOAA GEFS, NOAA HRRR, and ECMWF IFS and AIFS (open data versions) models. 
+This repository currently includes solar and wind tools, but may expand one day to include electric load. Forecasts can be created using the NOAA GFS, NOAA GEFS, NOAA HRRR, and ECMWF IFS and AIFS (open data versions) models. The ECMWF CAMS version of IFS is also included, but only via `hefty.solar.get_solar_forecast()`, and it requires `cdsapi` to be installed and the user needs an API key (see https://ads.atmosphere.copernicus.eu/how-to-api).
 
 For solar, look at the notebook [solar_example.ipynb](examples/solar_example.ipynb) for some examples, and [more_solar_examples.ipynb](examples/more_solar_examples.ipynb) for more examples. Both of these convert the resource forecasts to power.
 
@@ -72,10 +72,16 @@ A virtual environment is strongly recommended. You can install from PyPi with:
 pip install hefty
 ```
 
-To run the example jupyter notebooks:
+To run the example Jupyter notebooks, you also need `jupyter`:
 
 ```
 pip install jupyter
+```
+
+If you want to use ECMWF CAMS, you also need `cdsapi`:
+
+```
+pip install cdsapi
 ```
 
 ## References
