@@ -113,6 +113,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
     if type(latitude) is float or type(latitude) is int:
         latitude = [latitude]
         longitude = [longitude]
+    num_sites = len(latitude)
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
 
@@ -296,11 +297,6 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
     # work through sites
     dfs = {}  # empty list of dataframes
-    if type(latitude) is float or type(latitude) is int:
-        num_sites = 1
-    else:
-        num_sites = len(latitude)
-
     for j in range(num_sites):
         df = df_temp[df_temp.index.get_level_values('point') == j]
         df = df.droplevel('point')
@@ -621,6 +617,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
     if type(latitude) is float or type(latitude) is int:
         latitude = [latitude]
         longitude = [longitude]
+    num_sites = len(latitude)
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
 
@@ -706,11 +703,6 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
 
     # work through sites
     dfs = {}  # empty list of dataframes
-    if type(latitude) is float or type(latitude) is int:
-        num_sites = 1
-    else:
-        num_sites = len(latitude)
-
     for j in range(num_sites):
         df = df_temp[df_temp.index.get_level_values('point') == j]
         df = df.droplevel('point')
@@ -996,10 +988,9 @@ def get_solar_forecast_ensemble_subset(
     if type(latitude) is float or type(latitude) is int:
         latitude = [latitude]
         longitude = [longitude]
+    num_sites = len(latitude)
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
-
-    num_sites = len(latitude)
 
     # get model-specific Herbie inputs, except product and search string,
     # which are unique for the ensemble
@@ -1031,7 +1022,7 @@ def get_solar_forecast_ensemble_subset(
                                     product='enfo',
                                     fxx=fxx_range,
                                     priority=priority).xarray(search_str,
-                                                          overwrite=True)
+                                                              overwrite=True)
             except Exception:
                 if attempts_remaining:
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
@@ -1058,10 +1049,6 @@ def get_solar_forecast_ensemble_subset(
         df_temp = df_temp.rename(columns={'ssrd': 'sdswrf'})
 
         # work through sites (points)
-        if type(latitude) is float or type(latitude) is int:
-            num_sites = 1
-        else:
-            num_sites = len(latitude)
         for point in range(num_sites):
             df = df_temp[df_temp['point'] == point].copy()
 
@@ -1342,10 +1329,9 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
     if type(latitude) is float or type(latitude) is int:
         latitude = [latitude]
         longitude = [longitude]
+    num_sites = len(latitude)
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
-
-    num_sites = len(latitude)
 
     # get model-specific Herbie inputs, except product and search string,
     # which are unique for the ensemble
@@ -1413,10 +1399,6 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                           'time': 'init_time'})
 
         # work through sites (points) and members
-        if type(latitude) is float or type(latitude) is int:
-            num_sites = 1
-        else:
-            num_sites = len(latitude)
         member_list = df_temp['number'].unique()
         dfs = []
         for number in member_list:
@@ -1577,10 +1559,6 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
 
         dfs_temp_air = []
         # work through sites (points)
-        if type(latitude) is float or type(latitude) is int:
-            num_sites = 1
-        else:
-            num_sites = len(latitude)
         for point in range(num_sites):
             df = df_temp[df_temp['point'] == point].copy()
 
@@ -1686,11 +1664,6 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
             df_temp = df_temp.rename(columns={'time': 'init_time'})
 
             # work through sites (points) and members
-            if type(latitude) is float or type(latitude) is int:
-                num_sites = 1
-            else:
-                num_sites = len(latitude)
-
             for point in range(num_sites):
                 df = df_temp[(df_temp['point'] == point)].copy()
 
