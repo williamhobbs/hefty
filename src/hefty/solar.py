@@ -6,11 +6,21 @@ import pvlib
 import time
 from hefty.utilities import model_input_formatter
 
+try:
+    import cdsapi
+except ImportError:
+    _has_cdsapi = False
+else:
+    _has_cdsapi = True
+import os
+import toml
+
 
 def get_solar_forecast(latitude, longitude, init_date, run_length,
                        lead_time_to_start=0, model='gfs', member=None,
                        attempts=2, hrrr_hour_middle=True,
-                       hrrr_coursen_window=None, priority=None):
+                       hrrr_coursen_window=None, priority=None,
+                       cams_api_key=None, cams_area=None):
     """
     Get a solar resource forecast for one or several sites from one of several
     NWPs. This function uses Herbie [1]_ and pvlib [2]_.
@@ -32,15 +42,16 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         Length of the forecast in hours - number of hours forecasted
 
     lead_time_to_start : int, optional
-        Number of hours between init_date (initialization) and
-        the first forecasted interval. NOAA GFS data goes out
-        384 hours, so run_length + lead_time_to_start must be less
-        than or equal to 384.
+        Number of hours between init_date (initialization) and the first
+        forecasted interval. NOAA GFS data goes out 384 hours, so run_length
+        + lead_time_to_start must be less than or equal to 384.
 
     model : string, default 'gfs'
-        Forecast model. Default is NOAA GFS ('gfs'), but can also be
-        ECMWF IFS ('ifs'), ECMWF AIFS ('aifs'), NOAA HRRR ('hrrr'),
-        or NOAA GEFS ('gefs).
+        Forecast model. Default is NOAA GFS ('gfs'), but can also be ECMWF IFS
+        ('ifs'), ECMWF AIFS ('aifs'), NOAA HRRR ('hrrr'), or NOAA GEFS
+        ('gefs). ECMWF CAMS ('cams') is an experimental option. It requires
+        cdsapi to be installed and a CDS API key to be passed via the
+        'cams_api_key' parameter.
 
     member: string or int
         For models that are ensembles, pass an appropriate single member label.
@@ -68,6 +79,15 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         priority, or string for a single source. See Herbie docs.
         Typical values would be 'aws' or 'google'.
 
+    cams_api_key : string
+        Climate Data Store (CDS) API key, which is required for the 'cams'
+        model option. See https://ads.atmosphere.copernicus.eu/how-to-api.
+
+    cams_area : list, optional
+        List of latitude and logitude coordinates defining the North, South,
+        East, and West corners of the area to be covered when using 'cams'.
+        For example, [50, -125, 20, -65] approximately covers CONUS.
+
     Returns
     -------
     data : pandas.DataFrane
@@ -92,6 +112,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
     if type(latitude) is float or type(latitude) is int:
         latitude = [latitude]
         longitude = [longitude]
+    num_sites = len(latitude)
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
 
@@ -99,86 +120,183 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
     date, fxx_range, product, search_str = model_input_formatter(
         init_date, run_length, lead_time_to_start, model)
 
-    i = []
-    for fxx in fxx_range:
-        # get solar, 10m wind, and 2m temp data
-        # try n times based loosely on
-        # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
-        for attempts_remaining in reversed(range(attempts)):
-            attempt_num = attempts - attempts_remaining
-            try:
-                if attempt_num == 1:
-                    # try downloading
-                    ds = Herbie(
-                        date,
-                        model=model,
-                        product=product,
-                        fxx=fxx,
-                        member=member,
-                        priority=priority
-                        ).xarray(search_str)
+    # get NWP data as dataframe
+    if model != 'cams':
+        i = []
+        for fxx in fxx_range:
+            # get solar, 10m wind, and 2m temp data
+            # try n times based loosely on
+            # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
+            for attempts_remaining in reversed(range(attempts)):
+                attempt_num = attempts - attempts_remaining
+                try:
+                    if attempt_num == 1:
+                        # try downloading
+                        ds = Herbie(
+                            date,
+                            model=model,
+                            product=product,
+                            fxx=fxx,
+                            member=member,
+                            priority=priority
+                            ).xarray(search_str)
+                    else:
+                        # after first attempt, set overwrite=True to overwrite
+                        # partial files
+                        ds = Herbie(
+                            date,
+                            model=model,
+                            product=product,
+                            fxx=fxx,
+                            member=member,
+                            priority=priority
+                            ).xarray(search_str, overwrite=True)
+                except Exception:
+                    if attempts_remaining:
+                        print('attempt ' + str(attempt_num)
+                              + ' failed, pause for '
+                              + str((attempt_num)**2) + ' min')
+                        time.sleep(60*(attempt_num)**2)
                 else:
-                    # after first attempt, set overwrite=True to overwrite
-                    # partial files
-                    ds = Herbie(
-                        date,
-                        model=model,
-                        product=product,
-                        fxx=fxx,
-                        member=member,
-                        priority=priority
-                        ).xarray(search_str, overwrite=True)
-            except Exception:
-                if attempts_remaining:
-                    print('attempt ' + str(attempt_num) + ' failed, pause for '
-                          + str((attempt_num)**2) + ' min')
-                    time.sleep(60*(attempt_num)**2)
+                    break
             else:
-                break
-        else:
-            raise ValueError('download failed, ran out of attempts')
+                raise ValueError('download failed, ran out of attempts')
 
-        # merge - override avoids hight conflict between 2m temp and 10m wind
-        ds = xr.merge(ds, compat='override')
-        # calculate wind speed from u and v components
-        ds = ds.herbie.with_wind('speed')
+            # merge - override avoids hight conflict between 2m temp and 10m
+            # wind
+            ds = xr.merge(ds, compat='override')
+            # calculate wind speed from u and v components
+            ds = ds.herbie.with_wind('speed')
 
-        if model == 'hrrr' and hrrr_coursen_window is not None:
-            ds = ds.coarsen(x=hrrr_coursen_window,
-                            y=hrrr_coursen_window,
-                            boundary='trim').mean()
+            if model == 'hrrr' and hrrr_coursen_window is not None:
+                ds = ds.coarsen(x=hrrr_coursen_window,
+                                y=hrrr_coursen_window,
+                                boundary='trim').mean()
 
-        # use pick_points for single point or list of points
-        i.append(
-            ds.herbie.pick_points(
-                pd.DataFrame(
-                    {
-                        "latitude": latitude,
-                        "longitude": longitude,
-                    }
+            # use pick_points for single point or list of points
+            i.append(
+                ds.herbie.pick_points(
+                    pd.DataFrame(
+                        {
+                            "latitude": latitude,
+                            "longitude": longitude,
+                        }
+                    )
                 )
             )
-        )
-    ts = xr.concat(i, dim="valid_time")  # concatenate
-    # rename 'ssrd' to 'sdswrf' in ifs/aifs
-    if model == 'ifs' or model == 'aifs':
-        ts = ts.rename({'ssrd': 'sdswrf'})
-    # convert to dataframe
-    df_temp = ts.to_dataframe()[['sdswrf', 't2m', 'si10']]
-    # add timezone
-    df_temp = df_temp.tz_localize('UTC', level='valid_time')
-    # rename wind speed
-    df_temp = df_temp.rename(columns={'si10': 'wind_speed'})
-    # convert air temperature units
-    df_temp['temp_air'] = df_temp['t2m'] - 273.15
+            ts = xr.concat(i, dim="valid_time")  # concatenate
+            # rename 'ssrd' to 'sdswrf' in ifs/aifs
+            if model == 'ifs' or model == 'aifs':
+                ts = ts.rename({'ssrd': 'sdswrf'})
+            # convert to dataframe
+            df_temp = ts.to_dataframe()[['sdswrf', 't2m', 'si10']]
+            # add timezone
+            df_temp = df_temp.tz_localize('UTC', level='valid_time')
+            # rename wind speed
+            df_temp = df_temp.rename(columns={'si10': 'wind_speed'})
+            # convert air temperature units
+            df_temp['temp_air'] = df_temp['t2m'] - 273.15
+
+    elif model == 'cams':
+        if not _has_cdsapi:
+            raise ImportError(('cdsapi is required to use cams, '
+                               'e.g., with `pip install cdsapi`.'))
+        # directory path for saving cams files
+        # check to see if a custom herbie config path has been set
+        if os.environ.get('HERBIE_CONFIG_PATH') is not None:
+            herbie_config_path = os.environ['HERBIE_CONFIG_PATH']
+        else:
+            # otherwise, use default herbie config path
+            herbie_config_path = os.path.join(
+                os.path.expanduser('~'), '.config', 'herbie', 'config.toml')
+
+        config_data = toml.load(herbie_config_path)
+        # use 'cams' subfolder
+        cams_dir_path = os.path.join(config_data['default']['save_dir'],
+                                     'cams')
+        # if cams folder doesn't exist, make it
+        if not os.path.exists(cams_dir_path):
+            os.makedirs(cams_dir_path)
+
+        ts = pd.Timestamp(date)
+        date_str = ts.strftime('%Y-%m-%d')
+        time_str = ts.strftime('%H:%M')
+        filename = (
+            f'cams.{ts.strftime('%Y%m%d')}.{ts.strftime('%H')}z.'
+            f'{min(fxx_range):0{3}}.{max(fxx_range):0{3}}.grib'
+            )
+        download_path_file = os.path.join(
+            cams_dir_path,
+            filename)
+
+        if os.path.exists(download_path_file):  # load file if it exists
+            ds = xr.load_dataset(download_path_file)
+        else:  # otherwise download file
+            if cams_area is None:
+                cams_area = [90, -180, -90, 180]
+            request = {
+                'variable': ['surface_solar_radiation_downward_clear_sky',
+                             'surface_solar_radiation_downwards',
+                             '2m_temperature',
+                             '10m_u_component_of_wind',
+                             '10m_v_component_of_wind',
+                             'direct_solar_radiation',
+                             'clear_sky_direct_solar_radiation_at_surface',
+                             ],
+                'date': [date_str],
+                'time': [time_str],
+                'leadtime_hour': [str(i) for i in fxx_range],
+                'type': ['forecast'],
+                'data_format': 'grib',
+                'area': cams_area  # [N, W, S, E]
+            }
+            URL = 'https://ads.atmosphere.copernicus.eu/api'
+            client = cdsapi.Client(url=URL, key=cams_api_key)
+            dataset = "cams-global-atmospheric-composition-forecasts"
+            client.retrieve(dataset, request).download(download_path_file)
+            ds = xr.load_dataset(download_path_file)
+
+        # convert wind
+        ds.herbie.with_wind('speed')
+        # rename 'ssrd' to 'sdswrf', 'dsrp' to 'vbdsf'
+        ds = ds.rename({'ssrd': 'sdswrf',
+                        'dsrp': 'vbdsf'})
+
+        # use pick_points for single point or list of points
+        ds_temp = ds.herbie.pick_points(
+                        pd.DataFrame(
+                            {
+                                "latitude": latitude,
+                                "longitude": longitude,
+                            }
+                        )
+                    )
+
+        # convert to dataframe
+        df_temp = ds_temp.to_dataframe()
+
+        # reset index
+        df_temp = df_temp.reset_index().set_index('valid_time')
+
+        # add timezone
+        df_temp = df_temp.tz_localize('UTC', level='valid_time')
+        # rename wind speed
+        df_temp = df_temp.rename(columns={
+            'si10': 'wind_speed',
+            })
+        # convert air temperature units
+        df_temp['temp_air'] = df_temp['t2m'] - 273.15
+
+        # keep only select columns
+        df_temp = df_temp[['point', 'sdswrf', 'wind_speed', 'temp_air',
+                           'ssrdc', 'vbdsf', 'cdir', 'time']].copy()
+
+        # make index valid_time and point
+        df_temp = df_temp.reset_index().set_index(['valid_time',
+                                                   'point'])
 
     # work through sites
     dfs = {}  # empty list of dataframes
-    if type(latitude) is float or type(latitude) is int:
-        num_sites = 1
-    else:
-        num_sites = len(latitude)
-
     for j in range(num_sites):
         df = df_temp[df_temp.index.get_level_values('point') == j]
         df = df.droplevel('point')
@@ -189,9 +307,9 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             tz=df.index.tz
             )
 
-        if model == 'gfs':
-            # for gfs ghi: we have to "unmix" the rolling average irradiance
-            # that resets every 6 hours
+        if model in {'gfs', 'gefs'}:
+            # for gfs and gefs ghi: we have to "unmix" the rolling average
+            # irradiance that resets every 6 hours
             mixed = df[['sdswrf']].copy()
             mixed['hour'] = mixed.index.hour
             mixed['hour'] = mixed.index.hour
@@ -203,7 +321,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             mixed['int_len'] = mixed.index.diff().total_seconds().values / 3600
 
             # set the first interval length:
-            if lead_time_to_start >= 120:
+            if model == 'gfs' and lead_time_to_start >= 120:
                 mixed.loc[mixed.index[0], 'int_len'] = 1
             else:
                 mixed.loc[mixed.index[0], 'int_len'] = 3
@@ -212,31 +330,18 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                         * mixed['sdswrf_prev']) / mixed['int_len'])
             df['ghi'] = unmixed
 
-        elif model == 'gefs':
-            # for gfs ghi: we have to "unmix" the rolling average irradiance
-            # that resets every 6 hours
-            mixed = df[['sdswrf']].copy()
-            mixed['hour'] = mixed.index.hour
-            mixed['hour'] = mixed.index.hour
-            mixed['hour_of_mixed_period'] = ((mixed['hour'] - 1) % 6) + 1
-            mixed['sdswrf_prev'] = mixed['sdswrf'].shift(
-                periods=1,
-                fill_value=0
-                )
-            mixed['int_len'] = mixed.index.diff().total_seconds().values / 3600
-
-            # set the first interval length:
-            mixed.loc[mixed.index[0], 'int_len'] = 3
-            unmixed = ((mixed['hour_of_mixed_period'] * mixed['sdswrf']
-                        - (mixed['hour_of_mixed_period'] - mixed['int_len'])
-                        * mixed['sdswrf_prev']) / mixed['int_len'])
-            df['ghi'] = unmixed
-
-        elif model == 'ifs' or model == 'aifs':
+        elif model in {'ifs', 'aifs', 'cams'}:
             # for ifs ghi: cumulative J/m^s to average W/m^2 over the interval
             # ending at the valid time. calculate difference in measurement
             # over diff in time to get avg J/s/m^2 = W/m^2
             df['ghi'] = df['sdswrf'].diff() / df.index.diff().seconds.values
+
+            if model == 'cams':
+                df['dni'] = df['vbdsf'].diff() / df.index.diff().seconds.values
+                df['ghi_clear_nwp'] = (df['ssrdc'].diff() /
+                                       df.index.diff().seconds.values)
+                df['direct_horiz_clear'] = (df['cdir'].diff() /
+                                            df.index.diff().seconds.values)
 
         elif model == 'hrrr':
             df['ghi'] = df['sdswrf']
@@ -249,6 +354,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 freq='1min',
                 tz='UTC')
 
+            # calculate clear sky ghi with pvlib
             cs = loc.get_clearsky(times, model=model_cs)
 
             # calculate average CS ghi over the intervals from the forecast
@@ -261,8 +367,10 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 .mean() for i in range(len(dates) - 1)
                 ]
 
-            # write to df and calculate clear sky index of ghi
+            # write to df
             df['ghi_clear'] = [np.nan] + ghi_clear
+
+            # calculate clear sky index of ghi, dni
             df['ghi_csi'] = df['ghi'] / df['ghi_clear']
 
             # avoid divide by zero issues
@@ -287,7 +395,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # in 3hr version
             df_60min = pd.merge_asof(
                 left=df_60min,
-                right=df.ghi_csi,
+                right=df['ghi_csi'],
                 on='valid_time',
                 direction='forward'
             ).set_index('valid_time')
@@ -304,20 +412,57 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # index
             df_60min['ghi'] = cs['ghi'] * df_60min['ghi_csi']
 
-            # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
+            # dni and dhi using pvlib erbs. could also DIRINT or
+            # erbs-driesse
             sp = loc.get_solarposition(times)
             out_erbs = pvlib.irradiance.erbs(
-                df_60min.ghi,
-                sp.zenith,
+                df_60min['ghi'],
+                sp['zenith'],
                 df_60min.index,
             )
-            df_60min['dni'] = out_erbs.dni
-            df_60min['dhi'] = out_erbs.dhi
+            df_60min['dni'] = out_erbs['dni']
+            df_60min['dhi'] = out_erbs['dhi']
 
             # add clearsky ghi
             df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
 
             dfs[j] = df_60min
+
+        elif model == 'cams':
+            # 60min version of data, centered at bottom of the hour
+            # 1min interpolation, then 60min mean
+            df_60min = (
+                df[['temp_air', 'wind_speed']]
+                .resample('1min')
+                .interpolate()
+                .resample('60min').mean()
+            )
+            # make timestamps center-labeled for instantaneous pvlib modeling
+            # later
+            df_60min.index = df_60min.index + pd.Timedelta('30min')
+
+            # adjust timestamps to center of interval
+            df.index = df.index - pd.Timedelta('30min')
+
+            # direct horiz clear to dni_clear
+            sp = loc.get_solarposition(df.index)
+            df['dni_clear'] = (df['direct_horiz_clear'] /
+                               np.cos(np.deg2rad(sp['apparent_zenith'])))
+
+            df_60min = df_60min.join(df.drop(['temp_air', 'wind_speed'],
+                                             axis=1))
+
+            # calculate dhi from ghi, dni, solar position
+            df_60min['dhi'] = (df_60min['ghi'] -
+                               (df_60min['dni'] *
+                                np.cos(np.deg2rad(sp['apparent_zenith']))))
+            
+            # clean up dataframe
+            df_60min['ghi_clear'] = df_60min['ghi_clear_nwp']
+            df_60min = df_60min[['temp_air', 'wind_speed', 'ghi', 'dni', 'dhi',
+                                 'ghi_clear', 'dni_clear', 'time']]
+
+            dfs[j] = df_60min.copy()
 
         elif model == 'hrrr':
             if hrrr_hour_middle is True:
@@ -357,12 +502,12 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
             sp = loc.get_solarposition(df_60min.index)
             out_erbs = pvlib.irradiance.erbs(
-                df_60min.ghi,
-                sp.zenith,
+                df_60min['ghi'],
+                sp['zenith'],
                 df_60min.index,
             )
-            df_60min['dni'] = out_erbs.dni
-            df_60min['dhi'] = out_erbs.dhi
+            df_60min['dni'] = out_erbs['dni']
+            df_60min['dhi'] = out_erbs['dhi']
 
             # add clearsky ghi
             cs = loc.get_clearsky(df_60min.index, model=model_cs)
@@ -474,6 +619,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
     if type(latitude) is float or type(latitude) is int:
         latitude = [latitude]
         longitude = [longitude]
+    num_sites = len(latitude)
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
 
@@ -559,11 +705,6 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
 
     # work through sites
     dfs = {}  # empty list of dataframes
-    if type(latitude) is float or type(latitude) is int:
-        num_sites = 1
-    else:
-        num_sites = len(latitude)
-
     for j in range(num_sites):
         df = df_temp[df_temp.index.get_level_values('point') == j]
         df = df.droplevel('point')
@@ -574,9 +715,9 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             tz=df.index.tz
             )
 
-        if model == 'gfs':
-            # for gfs ghi: we have to "unmix" the rolling average irradiance
-            # that resets every 6 hours
+        if model in {'gfs', 'gefs'}:
+            # for gfs and gefs ghi: we have to "unmix" the rolling average
+            # irradiance that resets every 6 hours
             mixed = df[['sdswrf']].copy()
             mixed['hour'] = mixed.index.hour
             mixed['hour'] = mixed.index.hour
@@ -588,30 +729,10 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             mixed['int_len'] = mixed.index.diff().total_seconds().values / 3600
 
             # set the first interval length:
-            if lead_time_to_start >= 120:
+            if model == 'gfs' and lead_time_to_start >= 120:
                 mixed.loc[mixed.index[0], 'int_len'] = 1
             else:
                 mixed.loc[mixed.index[0], 'int_len'] = 3
-            unmixed = ((mixed['hour_of_mixed_period'] * mixed['sdswrf']
-                        - (mixed['hour_of_mixed_period'] - mixed['int_len'])
-                        * mixed['sdswrf_prev']) / mixed['int_len'])
-            df['ghi'] = unmixed
-
-        elif model == 'gefs':
-            # for gfs ghi: we have to "unmix" the rolling average irradiance
-            # that resets every 6 hours
-            mixed = df[['sdswrf']].copy()
-            mixed['hour'] = mixed.index.hour
-            mixed['hour'] = mixed.index.hour
-            mixed['hour_of_mixed_period'] = ((mixed['hour'] - 1) % 6) + 1
-            mixed['sdswrf_prev'] = mixed['sdswrf'].shift(
-                periods=1,
-                fill_value=0
-                )
-            mixed['int_len'] = mixed.index.diff().total_seconds().values / 3600
-
-            # set the first interval length:
-            mixed.loc[mixed.index[0], 'int_len'] = 3
             unmixed = ((mixed['hour_of_mixed_period'] * mixed['sdswrf']
                         - (mixed['hour_of_mixed_period'] - mixed['int_len'])
                         * mixed['sdswrf_prev']) / mixed['int_len'])
@@ -672,7 +793,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             # in 3hr version
             df_60min = pd.merge_asof(
                 left=df_60min,
-                right=df.ghi_csi,
+                right=df['ghi_csi'],
                 on='valid_time',
                 direction='forward'
             ).set_index('valid_time')
@@ -692,12 +813,12 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
             sp = loc.get_solarposition(times)
             out_erbs = pvlib.irradiance.erbs(
-                df_60min.ghi,
-                sp.zenith,
+                df_60min['ghi'],
+                sp['zenith'],
                 df_60min.index,
             )
-            df_60min['dni'] = out_erbs.dni
-            df_60min['dhi'] = out_erbs.dhi
+            df_60min['dni'] = out_erbs['dni']
+            df_60min['dhi'] = out_erbs['dhi']
 
             # add clearsky ghi
             df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
@@ -742,12 +863,12 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
             sp = loc.get_solarposition(df_60min.index)
             out_erbs = pvlib.irradiance.erbs(
-                df_60min.ghi,
-                sp.zenith,
+                df_60min['ghi'],
+                sp['zenith'],
                 df_60min.index,
             )
-            df_60min['dni'] = out_erbs.dni
-            df_60min['dhi'] = out_erbs.dhi
+            df_60min['dni'] = out_erbs['dni']
+            df_60min['dhi'] = out_erbs['dhi']
 
             # add clearsky ghi
             cs = loc.get_clearsky(df_60min.index, model=model_cs)
@@ -849,10 +970,9 @@ def get_solar_forecast_ensemble_subset(
     if type(latitude) is float or type(latitude) is int:
         latitude = [latitude]
         longitude = [longitude]
+    num_sites = len(latitude)
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
-
-    num_sites = len(latitude)
 
     # get model-specific Herbie inputs, except product and search string,
     # which are unique for the ensemble
@@ -884,7 +1004,7 @@ def get_solar_forecast_ensemble_subset(
                                     product='enfo',
                                     fxx=fxx_range,
                                     priority=priority).xarray(search_str,
-                                                          overwrite=True)
+                                                              overwrite=True)
             except Exception:
                 if attempts_remaining:
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
@@ -911,10 +1031,6 @@ def get_solar_forecast_ensemble_subset(
         df_temp = df_temp.rename(columns={'ssrd': 'sdswrf'})
 
         # work through sites (points)
-        if type(latitude) is float or type(latitude) is int:
-            num_sites = 1
-        else:
-            num_sites = len(latitude)
         for point in range(num_sites):
             df = df_temp[df_temp['point'] == point].copy()
 
@@ -994,12 +1110,12 @@ def get_solar_forecast_ensemble_subset(
             # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
             sp = loc.get_solarposition(times)
             out_erbs = pvlib.irradiance.erbs(
-                df_60min.ghi,
-                sp.zenith,
+                df_60min['ghi'],
+                sp['zenith'],
                 df_60min.index,
             )
-            df_60min['dni'] = out_erbs.dni
-            df_60min['dhi'] = out_erbs.dhi
+            df_60min['dni'] = out_erbs['dni']
+            df_60min['dhi'] = out_erbs['dhi']
 
             # add clearsky ghi
             df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
@@ -1195,10 +1311,9 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
     if type(latitude) is float or type(latitude) is int:
         latitude = [latitude]
         longitude = [longitude]
+    num_sites = len(latitude)
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
-
-    num_sites = len(latitude)
 
     # get model-specific Herbie inputs, except product and search string,
     # which are unique for the ensemble
@@ -1266,10 +1381,6 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                           'time': 'init_time'})
 
         # work through sites (points) and members
-        if type(latitude) is float or type(latitude) is int:
-            num_sites = 1
-        else:
-            num_sites = len(latitude)
         member_list = df_temp['number'].unique()
         dfs = []
         for number in member_list:
@@ -1355,12 +1466,12 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # erbs-driesse
                 sp = loc.get_solarposition(times)
                 out_erbs = pvlib.irradiance.erbs(
-                    df_60min.ghi,
-                    sp.zenith,
+                    df_60min['ghi'],
+                    sp['zenith'],
                     df_60min.index,
                 )
-                df_60min['dni'] = out_erbs.dni
-                df_60min['dhi'] = out_erbs.dhi
+                df_60min['dni'] = out_erbs['dni']
+                df_60min['dhi'] = out_erbs['dhi']
 
                 # add clearsky ghi
                 df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
@@ -1430,10 +1541,6 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
 
         dfs_temp_air = []
         # work through sites (points)
-        if type(latitude) is float or type(latitude) is int:
-            num_sites = 1
-        else:
-            num_sites = len(latitude)
         for point in range(num_sites):
             df = df_temp[df_temp['point'] == point].copy()
 
@@ -1539,11 +1646,6 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
             df_temp = df_temp.rename(columns={'time': 'init_time'})
 
             # work through sites (points) and members
-            if type(latitude) is float or type(latitude) is int:
-                num_sites = 1
-            else:
-                num_sites = len(latitude)
-
             for point in range(num_sites):
                 df = df_temp[(df_temp['point'] == point)].copy()
 
@@ -1642,12 +1744,12 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # erbs-driesse
                 sp = loc.get_solarposition(times)
                 out_erbs = pvlib.irradiance.erbs(
-                    df_60min.ghi,
-                    sp.zenith,
+                    df_60min['ghi'],
+                    sp['zenith'],
                     df_60min.index,
                 )
-                df_60min['dni'] = out_erbs.dni
-                df_60min['dhi'] = out_erbs.dhi
+                df_60min['dni'] = out_erbs['dni']
+                df_60min['dhi'] = out_erbs['dhi']
 
                 # add clearsky ghi
                 df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
