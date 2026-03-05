@@ -4,3 +4,4 @@ dist/
 .venv/
 *.egg-info
 test*.ipynb
+*api_key.txt
