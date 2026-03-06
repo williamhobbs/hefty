@@ -244,7 +244,7 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         product = 'sfc'
 
         if resource_type == 'solar':
-            search_str = 'DSWRF|:TMP:2 m above|[UV]GRD:10 m above'
+            search_str = 'DSWRF|VBDSF|:TMP:2 m above|[UV]GRD:10 m above'
         elif resource_type == 'wind':
             search_str = (
                 '[UV]GRD:10 m above|[UV]GRD:80 m above|'
