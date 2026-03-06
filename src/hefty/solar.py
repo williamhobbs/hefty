@@ -218,12 +218,17 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         if not os.path.exists(cams_dir_path):
             os.makedirs(cams_dir_path)
 
+        if cams_area is None:
+            cams_area = [90, -180, -90, 180]
+
         ts = pd.Timestamp(date)
         date_str = ts.strftime('%Y-%m-%d')
         time_str = ts.strftime('%H:%M')
         filename = (
             f'cams.{ts.strftime('%Y%m%d')}.{ts.strftime('%H')}z.'
-            f'{min(fxx_range):0{3}}.{max(fxx_range):0{3}}.grib'
+            f'{min(fxx_range):0{3}}.{max(fxx_range):0{3}}.'
+            f'{cams_area[0]}N_{cams_area[1]}E_{cams_area[2]}E_{cams_area[3]}N'
+            f'.grib'
             )
         download_path_file = os.path.join(
             cams_dir_path,
@@ -232,8 +237,6 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         if os.path.exists(download_path_file):  # load file if it exists
             ds = xr.load_dataset(download_path_file)
         else:  # otherwise download file
-            if cams_area is None:
-                cams_area = [90, -180, -90, 180]
             request = {
                 'variable': ['surface_solar_radiation_downward_clear_sky',
                              'surface_solar_radiation_downwards',
@@ -263,17 +266,32 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                         'dsrp': 'vbdsf'})
 
         # use pick_points for single point or list of points
+        method = 'weighted'
+        # point can be at most about 1.5 grid cells away from furthest of 4
+        # nearest neighbors (far corner of region). At ~45km max per 0.4 deg
+        # cell, that's sqrt(2*(45*1.5)^2) = ~96km
+        max_distance = 96
+        # use_cached_tree = True # hold off on saving a BallTree for now...
+        # tree_name = 'cams_balltree'
         ds_temp = ds.herbie.pick_points(
                         pd.DataFrame(
                             {
                                 "latitude": latitude,
                                 "longitude": longitude,
                             }
-                        )
+                        ),
+                        method=method,
+                        max_distance=max_distance,
+                        # use_cached_tree=use_cached_tree,
+                        # tree_name=tree_name,
                     )
 
         # convert to dataframe
         df_temp = ds_temp.to_dataframe()
+        if method == 'weighted':
+            # filter to a single "k"
+            df_temp = (df_temp[df_temp.index.isin([0], level='k')].
+                       droplevel(level='k'))
 
         # reset index
         df_temp = df_temp.reset_index().set_index('valid_time')
@@ -456,7 +474,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             df_60min['dhi'] = (df_60min['ghi'] -
                                (df_60min['dni'] *
                                 np.cos(np.deg2rad(sp['apparent_zenith']))))
-            
+
             # clean up dataframe
             df_60min['ghi_clear'] = df_60min['ghi_clear_nwp']
             df_60min = df_60min[['temp_air', 'wind_speed', 'ghi', 'dni', 'dhi',
