@@ -132,14 +132,15 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
 
     elif model == 'ifs':
         # From https://www.ecmwf.int/en/forecasts/datasets/open-data
-        # For times 00z &12z: 0 to 144 by 3, 150 to 240 by 6.
-        # For times 06z & 18z: 0 to 90 by 3.
+        # For times 00z &12z: 0 to 144 by 3, 150 to 360 by 6.
+        # For times 06z & 18z: 0 to 144 by 3.
         # From:
         # https://confluence.ecmwf.int/display/DAC/ECMWF+open+data%3A+real-time+forecasts+from+IFS+and+AIFS
         # Product "oper" runs 00z, 12z, 0h to 144h by 3h, 144h to 240h by 6h
         # Product "scda" runs 06z, 18z, 0h to 90h by 3h
         # **BUT**, see https://github.com/blaylockbk/Herbie/discussions/421
         # Starting 2024-11-12 06:00, 'scda' runs to 144h by 3h
+        # Starting 2024-11-12 12:00, 'oper' runs to 360h by 6h
 
         # round to last 6 hours to start
         date = init_date.floor('6h')
