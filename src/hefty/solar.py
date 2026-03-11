@@ -110,6 +110,9 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         'aod700': 0.05,
         'precipitable_water': 0.5,
     }
+    # minimum cosine of zenith, same default used in pvlib.irradiance
+    # functions. Could be an input variable at some point
+    min_cos_zenith = 0.065
 
     # variable formatting
     # if lat, lon are single values, convert to lists for pickpoints later
@@ -474,21 +477,21 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
             # direct horiz clear to dni_clear
             sp = loc.get_solarposition(df.index)
-            df['dni_clear'] = (df['direct_horiz_clear'] /
-                               np.cos(np.deg2rad(sp['apparent_zenith'])))
-
+            cos_zenith = np.maximum(np.cos(np.deg2rad(sp['apparent_zenith'])),
+                                    min_cos_zenith)
+            df['dni_clear'] = (df['direct_horiz_clear'] / cos_zenith)
             df_60min = df_60min.join(df.drop(['temp_air', 'wind_speed'],
                                              axis=1))
 
             # calculate dhi from ghi, dni, solar position
             df_60min['dhi'] = (df_60min['ghi'] -
-                               (df_60min['dni'] *
-                                np.cos(np.deg2rad(sp['apparent_zenith']))))
+                               (df_60min['dni'] * cos_zenith))
 
             # clean up dataframe
             df_60min['ghi_clear'] = df_60min['ghi_clear_nwp']
             df_60min = df_60min[['temp_air', 'wind_speed', 'ghi', 'dni', 'dhi',
-                                 'ghi_clear', 'dni_clear', 'time']]
+                                 'ghi_clear', 'dni_clear', 'time',
+                                 'direct_horiz_clear']]
 
             dfs[j] = df_60min.copy()
 
@@ -535,9 +538,10 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
             # calculate dhi from ghi, dni, solar position
             sp = loc.get_solarposition(df_60min.index)
+            cos_zenith = np.maximum(np.cos(np.deg2rad(sp['apparent_zenith'])),
+                                    min_cos_zenith)
             df_60min['dhi'] = (df_60min['ghi'] -
-                               (df_60min['dni'] *
-                                np.cos(np.deg2rad(sp['apparent_zenith']))))
+                               (df_60min['dni'] * cos_zenith))
 
             # add clearsky ghi
             cs = loc.get_clearsky(df_60min.index, model=model_cs,
@@ -649,6 +653,9 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         'aod700': 0.05,
         'precipitable_water': 0.5,
     }
+    # minimum cosine of zenith, same default used in pvlib.irradiance
+    # functions. Could be an input variable at some point
+    min_cos_zenith = 0.065
 
     # variable formatting
     # if lat, lon are single values, convert to lists for pickpoints later
@@ -908,9 +915,10 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
 
             # calculate dhi from ghi, dni, solar position
             sp = loc.get_solarposition(df_60min.index)
+            cos_zenith = np.maximum(np.cos(np.deg2rad(sp['apparent_zenith'])),
+                                    min_cos_zenith)
             df_60min['dhi'] = (df_60min['ghi'] -
-                               (df_60min['dni'] *
-                                np.cos(np.deg2rad(sp['apparent_zenith']))))
+                               (df_60min['dni'] * cos_zenith))
 
             # add clearsky ghi
             cs = loc.get_clearsky(df_60min.index, model=model_cs,
