@@ -84,8 +84,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         model option. See https://ads.atmosphere.copernicus.eu/how-to-api.
 
     cams_area : list, optional
-        List of latitude and logitude coordinates defining the North, East,
-        South, and West corners of the area to be covered when using 'cams'.
+        List of latitude and logitude coordinates defining the North, West,
+        South, and East corners of the area to be covered when using 'cams'.
         For example, [50, -125, 20, -65] approximately covers CONUS.
 
     Returns
