@@ -13,7 +13,7 @@ except ImportError:
 else:
     _has_cdsapi = True
 import os
-import toml
+import tomllib
 
 
 def get_solar_forecast(latitude, longitude, init_date, run_length,
@@ -84,8 +84,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         model option. See https://ads.atmosphere.copernicus.eu/how-to-api.
 
     cams_area : list, optional
-        List of latitude and logitude coordinates defining the North, South,
-        East, and West corners of the area to be covered when using 'cams'.
+        List of latitude and logitude coordinates defining the North, East,
+        South, and West corners of the area to be covered when using 'cams'.
         For example, [50, -125, 20, -65] approximately covers CONUS.
 
     Returns
@@ -218,7 +218,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             herbie_config_path = os.path.join(
                 os.path.expanduser('~'), '.config', 'herbie', 'config.toml')
 
-        config_data = toml.load(herbie_config_path)
+        with open(herbie_config_path, "rb") as f:
+            config_data = tomllib.load(f)
         # use 'cams' subfolder
         cams_dir_path = os.path.join(config_data['default']['save_dir'],
                                      'cams')
