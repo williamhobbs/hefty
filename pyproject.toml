@@ -21,6 +21,7 @@ classifiers = [
 dependencies = [
     "herbie-data[extras] >= 2026.1.0",
     "pvlib >= 0.13.1",
+    "pandas >= 3.0.0",
 ]
 license = "BSD-3-Clause"
 license-files = ["LICENSE*"]
