@@ -1058,7 +1058,7 @@ def get_solar_forecast_ensemble_subset(
                 if attempt_num == 1:
                     # try downloading
                     ds = FastHerbie(DATES=[init_date],
-                                    model='ifs',
+                                    model=model,
                                     product='enfo',
                                     fxx=fxx_range,
                                     priority=priority).xarray(search_str)
@@ -1066,7 +1066,7 @@ def get_solar_forecast_ensemble_subset(
                     # after first attempt, set overwrite=True to overwrite
                     # partial files
                     ds = FastHerbie(DATES=[init_date],
-                                    model='ifs',
+                                    model=model,
                                     product='enfo',
                                     fxx=fxx_range,
                                     priority=priority).xarray(search_str,
@@ -1208,14 +1208,14 @@ def get_solar_forecast_ensemble_subset(
             if attempt_num == 1:
                 # try downloading
                 ds = FastHerbie(DATES=[init_date],
-                                model='ifs',
+                                model=model,
                                 product='enfo',
                                 fxx=fxx_range).xarray(search_str)
             else:
                 # after first attempt, set overwrite=True to overwrite
                 # partial files
                 ds = FastHerbie(DATES=[init_date],
-                                model='ifs',
+                                model=model,
                                 product='enfo',
                                 fxx=fxx_range).xarray(search_str,
                                                       overwrite=True)
@@ -1570,7 +1570,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 if attempt_num == 1:
                     # try downloading
                     FH = FastHerbie(DATES=[init_date],
-                                    model='ifs',
+                                    model=model,
                                     product='enfo',
                                     fxx=fxx_range)
                     FH.download(search_str)
@@ -1579,7 +1579,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                     # after first attempt, set overwrite=True to overwrite
                     # partial files
                     FH = FastHerbie(DATES=[init_date],
-                                    model='ifs',
+                                    model=model,
                                     product='enfo',
                                     fxx=fxx_range)
                     FH.download(search_str, overwrite=True)
