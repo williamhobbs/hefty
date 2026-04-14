@@ -447,6 +447,9 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # index
             df_60min['ghi'] = cs['ghi'] * df_60min['ghi_csi']
 
+            # clip to avoid occasional small negative ghi in GEFS, see GH #35
+            df_60min['ghi'] = df_60min['ghi'].clip(lower=0)
+
             # dni and dhi using pvlib erbs. could also DIRINT or
             # erbs-driesse
             sp = loc.get_solarposition(times)
@@ -867,6 +870,9 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             # index
             df_60min['ghi'] = cs['ghi'] * df_60min['ghi_csi']
 
+            # clip to avoid occasional small negative ghi in GEFS, see GH #35
+            df_60min['ghi'] = df_60min['ghi'].clip(lower=0)
+
             # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
             sp = loc.get_solarposition(times)
             out_erbs = pvlib.irradiance.erbs(
@@ -1172,6 +1178,9 @@ def get_solar_forecast_ensemble_subset(
             # calculate ghi from clear sky and backfilled forecasted clear sky
             # index
             df_60min['ghi'] = cs['ghi'] * df_60min['ghi_csi']
+
+            # clip to avoid occasional small negative ghi in GEFS, see GH #35
+            df_60min['ghi'] = df_60min['ghi'].clip(lower=0)
 
             # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
             sp = loc.get_solarposition(times)
@@ -1813,6 +1822,9 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # calculate ghi from clear sky and backfilled forecasted clear
                 # sky index
                 df_60min['ghi'] = cs['ghi'] * df_60min['ghi_csi']
+
+                # clip to avoid occasional small negative ghi in GEFS, GH #35
+                df_60min['ghi'] = df_60min['ghi'].clip(lower=0)
 
                 # dni and dhi using pvlib erbs. could also DIRINT or
                 # erbs-driesse
