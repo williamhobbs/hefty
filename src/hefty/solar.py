@@ -17,7 +17,7 @@ import tomllib
 
 
 def get_solar_forecast(latitude, longitude, init_date, run_length,
-                       lead_time_to_start=0, model='gfs', member=None,
+                       lead_time_to_start=0, model='gfs', member='avg',
                        attempts=2, hrrr_hour_middle=True,
                        hrrr_coursen_window=None, priority=None,
                        cams_api_key=None, cams_area=None):
@@ -48,13 +48,17 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
     model : string, default 'gfs'
         Forecast model. Default is NOAA GFS ('gfs'), but can also be ECMWF IFS
-        ('ifs'), ECMWF AIFS ('aifs'), NOAA HRRR ('hrrr'), or NOAA GEFS
-        ('gefs). ECMWF CAMS ('cams') is an experimental option. It requires
-        cdsapi to be installed and a CDS API key to be passed via the
-        'cams_api_key' parameter.
+        single ('ifs'), ECMWF AIFS single ('aifs'), NOAA HRRR ('hrrr'), or
+        NOAA GEFS ('gefs') (a single member from the ensemble). ECMWF CAMS
+        ('cams') is an experimental option. It requires cdsapi to be installed
+        and a CDS API key to be passed via the 'cams_api_key' parameter.
 
-    member: string or int
-        For models that are ensembles, pass an appropriate single member label.
+    member: string or int, default 'avg'
+        For models that are ensembles (GEFS is the only current option),
+        pass an appropriate single member label. See Herbie documentation for
+        details [1]_. Options for GEFS include 'avg' or 'mean' (the ensemble
+        mean), 0 or 'c00' (control member), and 1-30 or 'p01'-'p30' for the 30
+        individual members.
 
     attempts : int, optional
         Number of times to try getting forecast data. The function will pause
@@ -569,7 +573,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
 
 def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
-                            lead_time_to_start=0, model='gfs', member=None,
+                            lead_time_to_start=0, model='gfs', member='avg',
                             attempts=2, hrrr_hour_middle=True,
                             hrrr_coursen_window=None, priority=None):
     """
@@ -601,12 +605,18 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         than or equal to 384.
 
     model : string, default 'gfs'
-        Forecast model. Default is NOAA GFS ('gfs'), but can also be
-        ECMWF IFS ('ifs'), ECMWF AIFS ('aifs'), NOAA HRRR ('hrrr'),
-        or NOAA GEFS ('gefs).
+        Forecast model. Default is NOAA GFS ('gfs'), but can also be ECMWF IFS
+        single ('ifs'), ECMWF AIFS single ('aifs'), NOAA HRRR ('hrrr'), or
+        NOAA GEFS ('gefs') (a single member from the ensemble). ECMWF CAMS
+        ('cams') is NOT available with this function. For CAMS access, see
+        :py:func:`hefty.solar.get_solar_forecast`.
 
-    member: string or int
-        For models that are ensembles, pass an appropriate single member label.
+    member: string or int, default 'avg'
+        For models that are ensembles (GEFS is the only current option),
+        pass an appropriate single member label. See Herbie documentation for
+        details [1]_. Options for GEFS include 'avg' or 'mean' (the ensemble
+        mean), 0 or 'c00' (control member), and 1-30 or 'p01'-'p30' for the 30
+        individual members.
 
     attempts : int, optional
         Number of times to try getting forecast data. The function will pause

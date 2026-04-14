@@ -7,8 +7,8 @@ import time
 
 def get_custom_forecast(latitude, longitude, init_date, run_length,
                         lead_time_to_start=0, period=3, model='gfs',
-                        product='pgrb2.0p25', search_str=':TMP:2 m above', 
-                        member=None, attempts=2, hrrr_hour_middle=True,
+                        product='pgrb2.0p25', search_str=':TMP:2 m above',
+                        member='avg', attempts=2, hrrr_hour_middle=True,
                         hrrr_coursen_window=None, priority=None):
     """
     Get a custom forecast for one or several sites from one of several
@@ -40,11 +40,16 @@ def get_custom_forecast(latitude, longitude, init_date, run_length,
         than or equal to 384.
 
     model : string, default 'gfs'
-        Forecast model. Default is NOAA GFS ('gfs'), but can also be
-        ECMWF IFS ('ifs'), NOAA HRRR ('hrrr'), or NOAA GEFS ('gefs).
+        Forecast model. Default is NOAA GFS ('gfs'), but can also be ECMWF IFS
+        single ('ifs'), ECMWF AIFS single ('aifs'), NOAA HRRR ('hrrr'), or
+        NOAA GEFS ('gefs') (a single member from the ensemble). 
 
-    member: string or int
-        For models that are ensembles, pass an appropriate single member label.
+    member: string or int, default 'avg'
+        For models that are ensembles (GEFS is the only current option),
+        pass an appropriate single member label. See Herbie documentation for
+        details [1]_. Options for GEFS include 'avg' or 'mean' (the ensemble
+        mean), 0 or 'c00' (control member), and 1-30 or 'p01'-'p30' for the 30
+        individual members.
 
     attempts : int, optional
         Number of times to try getting forecast data. The function will pause

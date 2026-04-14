@@ -6,7 +6,7 @@ from hefty.utilities import model_input_formatter
 
 
 def get_wind_forecast(latitude, longitude, init_date, run_length,
-                      lead_time_to_start=0, model='gfs', member=None,
+                      lead_time_to_start=0, model='gfs', member='avg',
                       attempts=2, hrrr_hour_middle=True,
                       hrrr_coursen_window=None, priority=None):
     """
@@ -36,11 +36,19 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
         than or equal to 384.
 
     model : string, default 'gfs'
-        Forecast model. Default is NOAA GFS ('gfs'), but can also be
-        ECMWF IFS ('ifs'), NOAA HRRR ('hrrr'), or NOAA GEFS ('gefs').
+        Forecast model. Default is NOAA GFS ('gfs'), but can also be ECMWF IFS
+        single ('ifs'), ECMWF AIFS single ('aifs'), NOAA HRRR ('hrrr'), or
+        NOAA GEFS ('gefs') (a single member from the ensemble). Unlike
+        :py:func:`hefty.solar.get_solar_forecast`, ECMWF CAMS is not an option
+        because the CAMS version of IFS does not include 80 or 100m wind
+        speed.
 
-    member: string or int
-        For models that are ensembles, pass an appropriate single member label.
+    member: string or int, default 'avg'
+        For models that are ensembles (GEFS is the only current option),
+        pass an appropriate single member label. See Herbie documentation for
+        details [1]_. Options for GEFS include 'avg' or 'mean' (the ensemble
+        mean), 0 or 'c00' (control member), and 1-30 or 'p01'-'p30' for the 30
+        individual members.
 
     attempts : int, optional
         Number of times to try getting forecast data. The function will pause
