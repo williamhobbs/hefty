@@ -1,5 +1,346 @@
 import pandas as pd
 import warnings
+import math
+
+
+def adjust_forecast_datetimes(available_date, run_length,
+                              lead_time_from_available_date_to_start,
+                              model='gfs'):
+    """
+    Helper function to adjust datetimes for use in
+    `hefty.utilities.model_input_formatter`.
+
+    [longer description]
+
+    Parameters
+    ----------
+    available_date : pandas-parsable datetime
+        Datetime at which the forecast outputs are available, assumed to be in
+        UTC unless a timezone-aware value is provided. This will be rounded
+        down (floor operation) to the hour, e.g., a value of
+        '2026-04-14 14:23:42+00:00' will be rounded down to
+        '2026-04-14 14:00+00:00'.
+
+    run_length : int
+        Length of the forecast in hours.
+
+    lead_time_from_available_date_to_start : int, default 0
+        Number of hours from the available_date (after rounding down to the
+        hour) to the targetted first interval in the forecast.
+
+    model : {'gfs', 'ifs', 'aifs', 'hrrr', 'gefs'}
+        Forecast model name. Default is 'gfs'.
+
+    Returns
+    -------
+    init_date : pandas-parsable datetime
+        Model initialization datetime, adjusted to be the first time *before*
+        the specified `available_date` for which model outputs are estimated to
+        be available. Accounts for standard model initialization times and
+        estimated delays between initilization and output availability.
+        time for the selected model and the model outputs must be available at
+        the time the function is run. For example, GEFS has initilization
+        times of 00:00, 06:00, 12:00, and 18:00 UTC, and model outputs are
+        only available 3.5 to 6 hours after initialization. The function
+        :py:func:`hefty.utilities.adjust_forecast_datetimes` can help with
+        determining correct times to use.
+
+    run_length : int
+        Length of the forecast in hours.
+
+    lead_time_to_start : int, default 0
+        Number of hours from the init_date to the first desired interval in
+        the forecast.
+    """
+
+    # issue tz warning if available_date.tzinfo is None
+    if available_date.tzinfo is None:
+        available_date.tz_localize('UTC')
+        warnings.warn(
+            ("You have provided a timezone-naive available_date. "
+             "It has been converted to UTC. If you did not intend "
+             "to provide a time in UTC, please make available_date "
+             "timezone-aware or convert it to UTC."))
+
+    # round down to last hour
+    available_date_floor = available_date.floor('1h')
+
+    fxx_max_requested = run_length + lead_time_from_available_date_to_start
+
+    delay_buffer = 2
+
+    # ===========================================================
+    # Forecast Definitions
+    # ===========================================================
+    fcast_sched_dict_ifs_1 = {
+        'start_date': ['2023-01-18 00:00',
+                       '2023-01-18 00:00',
+                       '2023-01-18 06:00'], # https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html#Data-Availability
+        'start_hour': [0, 150, 0],
+        'end_hour': [144, 240, 90],
+        'interval': [3, 6, 3],
+        'first_cycle': [0, 0, 6],
+        'update_freq': [12, 12, 12],
+        'delay_to_first_fcast': [515, 515, 450],
+        'time_between_fcst_hrs': [0.006, 0.006, 0.006],
+        'product': ['oper', 'oper', 'scda'],
+    }
+
+    # Nov 2012 extended 'oper' and 'scda' horizons
+    # https://github.com/blaylockbk/Herbie/discussions/421
+    fcast_sched_dict_ifs_2 = {
+        'start_date': ['2024-11-12 12:00',
+                       '2024-11-12 12:00',
+                       '2024-11-12 06:00'],
+        'start_hour': [0, 150, 0],
+        'end_hour': [144, 360, 90],
+        'interval': [3, 6, 3],
+        'first_cycle': [0, 0, 6],
+        'update_freq': [12, 12, 12],
+        'delay_to_first_fcast': [515, 515, 450],
+        'time_between_fcst_hrs': [0.006, 0.006, 0.006],
+        'product': ['oper', 'oper', 'scda'],
+    }
+
+    # Approx Oct 1 2025, removed 1hr extra delay in releasing files
+    # Start date is just a guess, needs confirmation
+    fcast_sched_dict_ifs_3 = {
+        **fcast_sched_dict_ifs_2,
+        'start_date': ['2025-10-01 12:00',
+                       '2025-10-01 12:00',
+                       '2025-10-01 06:00'],
+        'delay_to_first_fcast': [455, 455, 390],
+    }
+
+    fcast_definition_ifs = {
+        'Name': 'ifs',
+        'Start Date of Schedule': ['2023-01-18 00:00',
+                                   '2024-11-12 06:00',
+                                   '2025-10-01 06:00'],
+        'Forecast Schedule Dictionary': [fcast_sched_dict_ifs_1,
+                                         fcast_sched_dict_ifs_2,
+                                         fcast_sched_dict_ifs_3],
+    }
+
+    fcast_sched_dict_hrrr = {
+        'start_date': ['2020-12-03 01:00',
+                       '2020-12-03 00:00'],  # HRRR v4 started Dec 3, 2020, https://rapidrefresh.noaa.gov/hrrr/
+        'start_hour': [0, 0],
+        'end_hour': [18, 48],
+        'interval': [1, 1],
+        'first_cycle': [0, 0],
+        'update_freq': [1, 6],
+        'delay_to_first_fcast': [61, 63],
+        'time_between_fcst_hrs': [1.862, 1.125],
+        'product': ['18h', '48h'],
+    }
+
+    fcast_definition_hrrr = {
+        'Name': 'hrrr',
+        'Start Date of Schedule': ['2020-12-03 00:00'],
+        'Forecast Schedule Dictionary': [fcast_sched_dict_hrrr],
+    }
+
+    fcast_sched_dict_gfs = {
+        'start_date': ['2020-12-03 01:00',
+                       '2020-12-03 00:00'],  # needs confirmation
+        'start_hour': [0, 123],
+        'end_hour': [120, 384],
+        'interval': [1, 3],
+        'first_cycle': [0, 0],
+        'update_freq': [6, 6],
+        'delay_to_first_fcast': [238, 238],
+        'time_between_fcst_hrs': [0.263, 0.263],
+        'product': ['pgrb2.0p25', 'pgrb2.0p25'],
+    }
+
+    fcast_definition_gfs = {
+        'Name': 'gfs',
+        'Start Date of Schedule': ['2020-12-03 00:00'],  # needs confirmation
+        'Forecast Schedule Dictionary': [fcast_sched_dict_gfs],
+    }
+
+    fcast_sched_dict_gefs = {
+        'start_date': ['2020-12-03 01:00',
+                       '2020-12-03 00:00'],  # needs confirmation
+        'start_hour': [0, 390],
+        'end_hour': [384, 840],
+        'interval': [3, 6],
+        'first_cycle': [0, 0],
+        'update_freq': [6, 24],
+        'delay_to_first_fcast': [238, 238],
+        'time_between_fcst_hrs': [0.425, 0.4],  # second value needs verification
+        'product': ['3-hourly', 'extended'],  # needs update
+    }
+
+    fcast_definition_gefs = {
+        'Name': 'gefs',
+        'Start Date of Schedule': ['2020-12-03 00:00'],  # needs confirmation
+        'Forecast Schedule Dictionary': [fcast_sched_dict_gefs],
+    }
+
+    # ===========================================================
+
+    if model == 'gfs':
+        fcast_definition = fcast_definition_gfs
+        delay_buffer = 12
+
+    elif model == 'gefs':
+        fcast_definition = fcast_definition_gefs
+        delay_buffer = 15
+
+    elif model == 'hrrr':
+        fcast_definition = fcast_definition_hrrr
+        delay_buffer = 2
+
+    elif model == 'ifs':
+        # IFS Single, ENS is handled separately
+        fcast_definition = fcast_definition_ifs
+        delay_buffer = 15
+
+    elif model == 'aifs':
+        raise ValueError('model not added yet')
+
+    # elif model == 'ifs_ens' or model == 'aifs_ens':
+    #     # note: https://confluence.ecmwf.int/display/DAC/Dissemination+schedule
+    #     # does not include schedules for the full 06z and 18z runs. Those go
+    #     # out to 144h (6 days), but the schedules shown only go out 96h.
+    #     # Assume days 4-5 are delivered with the same delay as day 10 for the
+    #     # 12 and 00z runs.
+    #     update_freq = '6h'
+    #     ...
+
+    elif model == 'cams':
+        raise ValueError('model not added yet')
+
+    # round down to last hour
+    available_date_floor = available_date.floor('1h')
+
+    fxx_max_requested = run_length + lead_time_from_available_date_to_start
+
+    # Find appropriate schedule (latest start date before available_date)
+    sched_start_dates = [pd.Timestamp(x, tz='UTC') for x in
+                         fcast_definition['Start Date of Schedule']]
+    sched_start_date = max(date for date in sched_start_dates if
+                           date < available_date)
+    idx = sched_start_dates.index(sched_start_date)
+    sched = fcast_definition['Forecast Schedule Dictionary'][idx]
+
+    # schedule reference info
+    # max possible forecast hour, delay
+    max_model_fxx = max(sched['end_hour'])
+    idx = sched['end_hour'].index(max_model_fxx)
+    delay_to_first_fcast = sched['delay_to_first_fcast'][idx]
+    time_between_fcst_hrs = sched['time_between_fcst_hrs'][idx]
+    max_delay_minutes = (
+        delay_to_first_fcast +
+        (time_between_fcst_hrs * max_model_fxx) +
+        delay_buffer
+    )
+    # max possible delay in hours, rounded up (ceiling)
+    max_delay = math.ceil(max_delay_minutes / 60)
+
+    # NOT SURE THIS IS NEEDED???
+    # check if no schedules could go out far enough
+    if fxx_max_requested > (max_model_fxx - max_delay):
+        raise ValueError('The requested forecast goes too far out '
+                         'from the available_date after accounting '
+                         'for delays. Try a smaller run_length, '
+                         'lead_time_from_available_date_to_start '
+                         'or both.'
+                         )
+
+    # build sorted list of unique cycle times
+    cycle_list = []
+    for variation in range(len(sched['start_date'])):
+        first_cycle = sched['first_cycle'][variation]
+        update_freq = sched['update_freq'][variation]
+        cycle_list += list(range(first_cycle, 24, update_freq))
+    cycle_list = list(set(cycle_list))  # remove duplicates w/ set()
+    cycle_list = sorted(cycle_list)  # sort
+
+    # create a list of "lookbacks", hours before available_date,
+    # to iterate through.
+    # hours between available_date and each hour in cycle_list
+    lookbacks = [(available_date.hour - x) % 24 for x in cycle_list]
+    lookbacks = sorted(lookbacks)
+    lookback_start = min(lookbacks)  # the most recent lookback
+    # we want the lookbacks to cover at least the max of 24 hours or max_delay
+    # so extend the list of lookbacks by integer days, then trim it
+    days_to_add = 1 + max_delay // 24
+    list_of_days = list(range(days_to_add + 1))
+    lookbacks = sum([[x + 24*y for x in lookbacks] for y in list_of_days], [])
+    max_lookback = (24*days_to_add + lookback_start)
+    lookbacks = [x for x in lookbacks if x <= max_lookback]
+
+    # cycles that correspond to the lookbacks
+    lookback_cycles = [(available_date.hour - x) % 24 for x in lookbacks]
+
+    # check options
+    for i in range(len(lookbacks)):
+        lookback = lookbacks[i]
+        fxx_max = fxx_max_requested + lookback
+        lead_time_to_start = lead_time_from_available_date_to_start + lookback
+        if (fxx_max > (max_model_fxx - max_delay)):
+            break
+        cycle = lookback_cycles[i]
+        init_date = (available_date_floor - pd.Timedelta(hours=lookback))
+
+        for variation in range(len(sched['start_date'])):
+            first_cycle = sched['first_cycle'][variation]
+            update_freq = sched['update_freq'][variation]
+            start_hour = sched['start_hour'][variation]
+            end_hour = sched['end_hour'][variation]
+            interval = sched['interval'][variation]
+            delay_to_first_fcast = sched['delay_to_first_fcast'][variation]
+            time_between_fcst_hrs = sched['time_between_fcst_hrs'][variation]
+            # list of cycles that this variation represents
+            variation_cycles = list(range(first_cycle,24,update_freq))
+            if cycle in variation_cycles:
+
+                # if we aren't in the last list in the forecast schedule
+                # variation
+                if variation < len(sched['start_date']) - 1:
+                    # start point of the next forecast schedule variation
+                    next_start = sched['start_hour'][variation + 1]
+                    # if the desired lead time falls between the end of this
+                    # schdeule and the start of the next
+                    if ((lead_time_to_start > end_hour) and
+                            (lead_time_to_start < next_start)):
+                        # then set lead time to stop of the current sched list
+                        # ("round" down)
+                        lead_time_to_start = end_hour
+                    # if the desired fxx_max falls between schedules
+                    if fxx_max > end_hour and fxx_max < next_start:
+                        # then set it to the next start ("round" up)
+                        fxx_max = next_start
+                if ((lead_time_to_start >= start_hour) and
+                        (lead_time_to_start <= end_hour)):
+                    # round lead_time_to_start down
+                    lead_time_to_start = (
+                        interval * math.floor(lead_time_to_start/interval)
+                        )
+                if fxx_max >= start_hour and fxx_max <= end_hour:
+                    # round fxx_max up
+                    fxx_max = interval * math.ceil(fxx_max/interval)
+                # if fxx_max <= end_hour:
+
+                delay_minutes = (
+                    delay_to_first_fcast +
+                    (time_between_fcst_hrs * fxx_max) +
+                    delay_buffer
+                )
+
+                delay = delay_minutes / 60
+
+                if delay <= lookback:
+                    break
+        else:
+            continue
+        break
+    run_length = fxx_max - lead_time_to_start
+
+    return init_date, run_length, lead_time_to_start
 
 
 def model_input_formatter(init_date, run_length, lead_time_to_start=0,
@@ -15,17 +356,23 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
     Parameters
     ----------
     init_date : pandas-parsable datetime
-        Targetted initialization datetime.
+        Model initialization datetime. Must be a valid inititialization time
+        for the selected model and the model outputs must be available at the
+        time the function is run. For example, GEFS has initilization times of
+        00:00, 06:00, 12:00, and 18:00 UTC, and model outputs are only
+        available 3.5 to 6 hours after initialization. The function
+        :py:func:`hefty.utilities.adjust_forecast_datetimes` can help with
+        determining correct times to use.
 
     run_length : int
         Length of the forecast in hours.
 
-    lead_time_to_start : int
+    lead_time_to_start : int, default 0
         Number of hours from the init_date to the first interval in the
         forecast.
 
     model : {'gfs', 'ifs', 'aifs', 'hrrr', 'gefs'}
-        Forecast model name, case insensitive. Default is 'gfs'.
+        Forecast model name. Default is 'gfs'.
 
     resource_type : {'solar, 'wind'}
         Resrouce type. Default is 'solar'.
