@@ -25,19 +25,20 @@ As a simplified example, assume a model:
 See the diagram below. If the current time is 07:00 UTC, and you want a forecast that covers 10:00 to 13:00 UTC, that's a desired lead time of 3 hr and a desired run length of 3 hours. Because the 06Z initialization time model run outputs will not be available until after 10:30, you will need to use the 00Z model outputs. And to get forecasted values that cover hours beginning 10:00-12:00 UTC, hefty will need to access the 9-, 12-, and 15-hour ahead outputs (labeled `f09`-`f15` below) from the 00Z forecast, which will be interpolated to hourly and will include the hours of interest.  
 
 ```
-                                                   Current time
-                                                        |
-                                                        ↓----lead time---→|====run length===|
-              |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
-Hour (UTC):   00    01    02    03    04    05    06    07    08    09    10    11    12    13    14    15
-              |XXXXXXXXXXXXXXXXXXXXXXXXXX|        |
-              |         00z delay                 |XXXXXXXXXXXXXXXXXXXXXXXXXX|
-              |                                   |         06z delay
-              |f00--------------|f03--------------|f06--------------|f09--------------|f12--------------|f15
-              |         00z NWP forecast          |f00--------------|f03--------------|f06--------------|f09
-              |                                   |         06z NWP forecast
-              00z init_date                       |
-                                                  06z init_date         
+                                                 Current time
+                                                      |
+                                                      ↓----lead time---→|====run length===|
+            |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+Hour (UTC): 00    01    02    03    04    05    06    07    08    09    10    11    12    13    14    15
+            |XXXXXXXX 00z delay XXXXXXX|        |
+            |f00--------------|f03--------------|f06--------------|f09--------------|f12--------------|f15
+            |         00z NWP forecast          |         
+            |                                   |
+            00z init_date                       |XXXXXXXX 06z delay XXXXXXX|
+                                                |f00--------------|f03--------------|f06--------------|f09
+                                                |         06z NWP forecast
+                                                |
+                                                06z init_date         
 ```
 
 To help with this, hefty includes a helper function in `hefty.utilities` called `adjust_forecast_datetimes`. Here's an example, similar to the illustration above, using GEFS:
