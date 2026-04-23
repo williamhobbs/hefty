@@ -15,7 +15,7 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
     ----------
     available_date : pandas-parsable datetime
         Datetime at which the forecast outputs need to be available, assumed
-        to be in UTC unless a timezone-aware value is provided. 
+        to be in UTC unless a timezone-aware value is provided.
 
     run_length_needed : int
         Length of the forecast that is needed, in hours, starting from the
@@ -540,25 +540,25 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         # lead_time_to_start = lead_time_to_start + init_offset
         fxx_max = run_length + lead_time_to_start
 
-        # pick init time based on forecast max lead time:
-        # check if 'scda' product is ideal
-        if init_date.hour == 6 or init_date.hour == 18:
-            if init_date >= pd.to_datetime('2024-11-12 06:00'):
-                scda_fxx_max = 144
-            else:
-                scda_fxx_max = 90
-            if fxx_max > scda_fxx_max:  # forecast beyond scda
-                update_freq = '12h'  # must use 'oper' runs
-                warnings.warn(
-                    ("You have specified an init_date which would have mapped "
-                     "to a 06z or 18z. Those runs the IFS 'scda' product, and "
-                     "'scda' only goes out 144 hours (90h prior to 2024-11-12)"
-                     ". You will get forecasts from the 'oper' run 6 hours "
-                     "earlier, instead."))
-            else:
-                update_freq = '6h'  # can use 'oper' or 'scda'
-        else:
-            update_freq = '6h'  # can use 'oper' or 'scda'
+        # # pick init time based on forecast max lead time:
+        # # check if 'scda' product is ideal
+        # if init_date.hour == 6 or init_date.hour == 18:
+        #     if init_date >= pd.to_datetime('2024-11-12 06:00'):
+        #         scda_fxx_max = 144
+        #     else:
+        #         scda_fxx_max = 90
+        #     if fxx_max > scda_fxx_max:  # forecast beyond scda
+        #         update_freq = '12h'  # must use 'oper' runs
+        #         warnings.warn(
+        #             ("You have specified an init_date which would have mapped "
+        #              "to a 06z or 18z. Those runs the IFS 'scda' product, and "
+        #              "'scda' only goes out 144 hours (90h prior to 2024-11-12)"
+        #              ". You will get forecasts from the 'oper' run 6 hours "
+        #              "earlier, instead."))
+        #     else:
+        #         update_freq = '6h'  # can use 'oper' or 'scda'
+        # else:
+        #     update_freq = '6h'  # can use 'oper' or 'scda'
         # # round down to last actual initialization time
         # date = init_date.floor(update_freq)
 
