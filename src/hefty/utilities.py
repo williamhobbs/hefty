@@ -55,7 +55,7 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
 
     # issue tz warning if available_date.tzinfo is None
     if available_date.tzinfo is None:
-        available_date.tz_localize('UTC')
+        available_date = available_date.tz_localize('UTC')
         warnings.warn(
             ("You have provided a timezone-naive available_date. "
              "It has been converted to UTC. If you did not intend "
@@ -669,5 +669,8 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         # maximum forecast horizon
         fxx_max = run_length + lead_time_to_start
         fxx_range = range(lead_time_to_start, fxx_max + 1, 1)
+
+    # strip tz from init_date if it has a tz
+    init_date = init_date.tz_localize(None)
 
     return init_date, fxx_range, product, search_str
