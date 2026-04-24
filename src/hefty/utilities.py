@@ -75,7 +75,7 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
     fcast_sched_dict_ifs_1 = {
         'start_date': ['2023-01-18 00:00',
                        '2023-01-18 00:00',
-                       '2023-01-18 06:00'], # https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html#Data-Availability
+                       '2023-01-18 06:00'],  # https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html#Data-Availability
         'start_hour': [0, 150, 0],
         'end_hour': [144, 240, 90],
         'interval': [3, 6, 3],
@@ -86,7 +86,7 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
         'product': ['oper', 'oper', 'scda'],
     }
 
-    # Nov 2012 extended 'oper' and 'scda' horizons
+    # Nov 2024 extended 'oper' and 'scda' horizons
     # https://github.com/blaylockbk/Herbie/discussions/421
     fcast_sched_dict_ifs_2 = {
         'start_date': ['2024-11-12 12:00',
@@ -103,7 +103,14 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
     }
 
     # Approx Oct 1 2025, removed 1hr extra delay in releasing files
-    # Start date is just a guess, needs confirmation
+    # Start date is just a guess, needs confirmation. Descriptoin changed
+    # sometime between Nov 6 [1] and Nov 22 [2] 2025, but the changes to the
+    # ECMWF open data website are often delayed. Maybe it corresponded with
+    # this press release [3]?
+    #
+    # [1] https://web.archive.org/web/20251106132450/https://www.ecmwf.int/en/forecasts/datasets/open-data
+    # [2] https://web.archive.org/web/20251122204201/https://www.ecmwf.int/en/forecasts/datasets/open-data
+    # [3] https://www.ecmwf.int/en/about/media-centre/news/2025/ecmwf-makes-its-entire-real-time-catalogue-open-all
     fcast_sched_dict_ifs_3 = {
         **fcast_sched_dict_ifs_2,
         'start_date': ['2025-10-01 12:00',
@@ -122,6 +129,49 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
                                          fcast_sched_dict_ifs_3],
     }
 
+    # IFS ens does not have ssrd until sometime March 2024. '2024-03-12 12:00'
+    # was the first init_date used in https://github.com/williamhobbs/PVSC-2025-daily-energy-forecaster,
+    # so start there for now.
+    # delays based on https://dynamical.org/status/ as of 2026-04-24
+    fcast_sched_dict_ifs_ens_1 = {
+        'start_date': ['2024-03-10 12:00',
+                       '2024-03-10 12:00',
+                       '2024-03-10 18:00'],  # https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html#Data-Availability
+        'start_hour': [0, 150, 0],
+        'end_hour': [144, 240, 90],
+        'interval': [3, 6, 3],
+        'first_cycle': [0, 0, 6],
+        'update_freq': [12, 12, 12],
+        'delay_to_first_fcast': [520, 520, 484],  
+        'time_between_fcst_hrs': [0.02, 0.02, 0.03],
+        'product': ['enfo', 'enfo', 'enfo'],
+    }
+
+    # Approx Oct 1 2025, removed 1hr extra delay in releasing files
+    # Start date is just a guess, needs confirmation. Descriptoin changed
+    # sometime between Nov 6 [1] and Nov 22 [2] 2025, but the changes to the
+    # ECMWF open data website are often delayed. Maybe it corresponded with
+    # this press release [3]?
+    #
+    # [1] https://web.archive.org/web/20251106132450/https://www.ecmwf.int/en/forecasts/datasets/open-data
+    # [2] https://web.archive.org/web/20251122204201/https://www.ecmwf.int/en/forecasts/datasets/open-data
+    # [3] https://www.ecmwf.int/en/about/media-centre/news/2025/ecmwf-makes-its-entire-real-time-catalogue-open-all
+    fcast_sched_dict_ifs_ens_2 = {
+        **fcast_sched_dict_ifs_2,
+        'start_date': ['2025-10-01 12:00',
+                       '2025-10-01 12:00',
+                       '2025-10-01 06:00'],
+        'delay_to_first_fcast': [460, 460, 424],  
+    }
+
+    fcast_definition_ifs_ens = {
+        'Name': 'ifs',
+        'Start Date of Schedule': ['2024-03-10 12:00',
+                                   '2025-10-01 12:00'],
+        'Forecast Schedule Dictionary': [fcast_sched_dict_ifs_ens_1,
+                                         fcast_sched_dict_ifs_ens_2],
+    }
+
     fcast_sched_dict_aifs = {
         'start_date': ['2024-02-01 00:00'],  # https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html
         'start_hour': [0],
@@ -130,7 +180,7 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
         'first_cycle': [0],
         'update_freq': [6],
         'delay_to_first_fcast': [339],
-        'time_between_fcst_hrs': [0.006],
+        'time_between_fcst_hrs': [0.008],
         'product': ['aifs'],
     }
 
@@ -138,6 +188,26 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
         'Name': 'aifs',
         'Start Date of Schedule': ['2024-02-01 00:00'],
         'Forecast Schedule Dictionary': [fcast_sched_dict_aifs],
+    }
+
+    # AIFS ENS schedule is unverified, based on
+    # https://confluence.ecmwf.int/display/DAC/Dissemination+schedule
+    fcast_sched_dict_aifs_ens = {
+        'start_date': ['2025-07-03 00:00'],  # https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html
+        'start_hour': [0, 0],
+        'end_hour': [360, 96],
+        'interval': [6, 6],
+        'first_cycle': [0, 6],
+        'update_freq': [12, 12],
+        'delay_to_first_fcast': [400, 400],
+        'time_between_fcst_hrs': [0.125, 0.125],
+        'product': ['enfo', 'enfo'],
+    }
+
+    fcast_definition_aifs_ens = {
+        'Name': 'aifs',
+        'Start Date of Schedule': ['2025-07-03 00:00'],
+        'Forecast Schedule Dictionary': [fcast_sched_dict_aifs_ens],
     }
 
     # Runs 00z and 12z, 0-120h by 1h for single-level parameters
@@ -238,15 +308,17 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
         delay_buffer = 15
 
     elif model == 'aifs':
-        # AIFS single, ENS is hadled separately
+        # AIFS single, ENS is handled separately
         fcast_definition = fcast_definition_aifs
         delay_buffer = 15
 
     elif model == 'ifs_ens':
-        raise ValueError('model not added yet')
+        fcast_definition = fcast_definition_ifs_ens
+        delay_buffer = 15
 
     elif model == 'aifs_ens':
-        raise ValueError('model not added yet')
+        fcast_definition = fcast_definition_aifs_ens
+        delay_buffer = 15
 
     elif model == 'cams':
         fcast_definition = fcast_definition_cams
@@ -416,7 +488,7 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         Number of hours from the init_date to the first interval in the
         forecast.
 
-    model : {'gfs', 'ifs', 'aifs', 'hrrr', 'gefs'}
+    model : {'gfs', 'ifs', 'aifs', 'hrrr', 'gefs', 'ifs_ens', 'aifs_ens'}
         Forecast model name. Default is 'gfs'.
 
     resource_type : {'solar, 'wind'}
@@ -522,7 +594,7 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         # set forecast lead times
         fxx_range = range(lead_time_to_start, fxx_max + 1, 3)
 
-    elif model == 'ifs':
+    elif model == 'ifs' or model == 'ifs_ens':
         # From https://www.ecmwf.int/en/forecasts/datasets/open-data
         # For times 00z &12z: 0 to 144 by 3, 150 to 360 by 6.
         # For times 06z & 18z: 0 to 144 by 3.
@@ -597,7 +669,7 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         elif resource_type == 'wind':
             search_str = ':10[uv]|:100[uv]|:2t:sfc|:sp:'
 
-    elif model == 'aifs':
+    elif model == 'aifs' or model == 'aifs_ens':
         # From https://www.ecmwf.int/en/forecasts/datasets/set-ix,
         # https://www.ecmwf.int/en/forecasts/dataset/set-x
         # 4 forecast runs per day (00/06/12/18)

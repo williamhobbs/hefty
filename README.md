@@ -68,6 +68,8 @@ Those outputs could then be directly passed as inputs to `hefty.solar.get_solar_
 
 Model delays are more than just a fixed time: they can vary by lead time and by cycle time. And some cycles have different total run lengths and interval size for some models. `adjust_forecast_datetimes` adjusts for all of this for you.
 
+Delays calculated in `adjust_forecast_datetimes` are based on experiments in this gist https://gist.github.com/williamhobbs/9585ff5d1248ab5de4d9e8665d7c8ea6 (which will hopefully one day be cleaned up and added to this repo somehow), documentation published by ECMWF, and this cool dashboard by dynamical.org https://dynamical.org/status/.
+
 ## Quick examples
 
 Here's a quick example of getting a solar resource data forecast, assuming you have already determined the dates/times needed:
