@@ -439,9 +439,6 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
     found_match_length = False
     found_match_delay = False
     for i in range(len(lookbacks)):
-        if found_match_delay & found_match_length:
-            print('found a match!')
-            break
         lookback = lookbacks[i]
         fxx_max = fxx_max_requested + lookback
         lead_time_to_start = lead_time_to_start_needed + lookback
