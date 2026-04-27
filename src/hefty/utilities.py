@@ -364,32 +364,12 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
 
     fxx_max_requested = run_length_needed + lead_time_to_start_needed
 
-    delay_buffer = 2
-
     fcast_definition = get_fcast_definition(model=model)
 
-    if model == 'gfs':
-        delay_buffer = 12
-
-    elif model == 'gefs':
-        delay_buffer = 15
-
-    elif model == 'hrrr':
+    # add an extra 2 minute sof delay for hrrr, 15 minutes for everything else
+    if model == 'hrrr':
         delay_buffer = 2
-
-    elif model == 'ifs':
-        delay_buffer = 15
-
-    elif model == 'aifs':
-        delay_buffer = 15
-
-    elif model == 'ifs_ens':
-        delay_buffer = 15
-
-    elif model == 'aifs_ens':
-        delay_buffer = 15
-
-    elif model == 'cams':
+    else:
         delay_buffer = 15
 
     # Find appropriate schedule (latest start date before available_date)
@@ -413,6 +393,8 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
     )
     # max possible delay in hours, rounded up (ceiling)
     max_delay = math.ceil(max_delay_minutes / 60)
+
+    max_period = max(sched['update_period'])
 
     # check if no schedules could go out far enough
     if fxx_max_requested > (max_model_fxx - max_delay):
@@ -441,9 +423,10 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
     # if our available_date is not top of the hour, let's keep track of the
     # hour remainder to use later
     rem = (available_date - available_date.floor('1h')).total_seconds() / 3600
-    # we want the lookbacks to cover at least the max of 24 hours or max_delay
-    # so extend the list of lookbacks by integer days, then trim it
-    days_to_add = 1 + max_delay // 24
+    # we want the lookbacks to cover at least the max of 24 hours or
+    # (max_delay + max_period), so extend the list of lookbacks by integer
+    # days, then trim it
+    days_to_add = 1 + (max_delay + max_period) // 24
     list_of_days = list(range(days_to_add + 1))
     lookbacks = sum([[x + 24*y for x in lookbacks] for y in list_of_days], [])
     max_lookback = (24*days_to_add + lookback_start)
@@ -453,7 +436,12 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
     lookback_cycles = [(available_date.hour - x) % 24 for x in lookbacks]
 
     # check options
+    found_match_length = False
+    found_match_delay = False
     for i in range(len(lookbacks)):
+        if found_match_delay & found_match_length:
+            print('found a match!')
+            break
         lookback = lookbacks[i]
         fxx_max = fxx_max_requested + lookback
         lead_time_to_start = lead_time_to_start_needed + lookback
@@ -478,7 +466,6 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
             # list of cycles that this variation represents
             variation_cycles = list(range(first_cycle, 24, update_period))
             if cycle in variation_cycles:
-
                 # if we aren't in the last list in the forecast schedule
                 # variation
                 if variation < len(sched['start_date']) - 1:
@@ -504,6 +491,7 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
                 if fxx_max >= start_hour and fxx_max <= end_hour:
                     # round fxx_max up
                     fxx_max = interval * math.ceil(fxx_max/interval)
+                    found_match_length = True
                 if fxx_max <= end_hour:
                     delay_minutes = (
                         delay_intercept +
@@ -514,11 +502,18 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
                     delay = delay_minutes / 60
 
                     if delay <= lookback + rem:
+                        found_match_delay = True
                         break
         else:
             continue
         break
-    run_length = fxx_max - lead_time_to_start
+    if found_match_delay & found_match_length:
+        run_length = fxx_max - lead_time_to_start
+    else:
+        raise ValueError('Could not find a compatible init_date. Maybe '
+                         'try a smaller run_length_needed, '
+                         'lead_time_to_start_needed, or both.'
+                         )
 
     return init_date, run_length, lead_time_to_start
 
