@@ -3,71 +3,52 @@ import warnings
 import math
 
 
-def adjust_forecast_datetimes(available_date, run_length_needed,
-                              lead_time_to_start_needed, model='gfs'):
+def get_fcast_definition(model='gfs'):
     """
-    Helper function to adjust datetimes for use in
-    `hefty.utilities.model_input_formatter`.
-
-    [longer description]
+    Function that returns a forecast definition dictionary for the selected
+    model.
 
     Parameters
     ----------
-    available_date : pandas-parsable datetime
-        Datetime at which the forecast outputs need to be available, assumed
-        to be in UTC unless a timezone-aware value is provided.
 
-    run_length_needed : int
-        Length of the forecast that is needed, in hours, starting from the
-        ``lead_time_to_start``.
-
-    lead_time_to_start_needed : int, default 0
-        Number of hours from the ``available_date`` (after rounding down to the
-        hour) to the targetted first interval in the forecast.
-
-    model : {'gfs', 'ifs', 'aifs', 'hrrr', 'gefs'}
+    model : {'gfs', 'ifs', 'aifs', 'hrrr', 'gefs', 'ifs_ens', 'aifs_ens'}
         Forecast model name. Default is 'gfs'.
 
     Returns
     -------
-    init_date : pandas-parsable datetime
-        Model initialization datetime, adjusted to be the first time *before*
-        the specified ``available_date`` for which model outputs are estimated
-        to be available. Accounts for standard model initialization times and
-        estimated delays between initilization and output availability
-        time for the selected model. For example, GEFS has initilization
-        times of 00:00, 06:00, 12:00, and 18:00 UTC, and model outputs are
-        only available 3.5 to 6 hours after initialization. The function
-        :py:func:`hefty.utilities.adjust_forecast_datetimes` can help with
-        determining correct times to use.
+    fcast_definition : dictionary
+        A dictionary with information about a forecast model, including the
+        'Name' (e.g., 'gfs'), a list of one or more schedule dictionaries,
+        'Forecast Schedule Dictionary', and a list of start dates that
+        correspond with those schedules, 'Start Date of Schedule'.
 
-    run_length : int
-        Length of the forecast in hours, relative to the returned
-        ``lead_time_to_start``.
+    Notes
+    -----
+    The ``'Forecast Schedule Dictionary'`` within ``fcast_definition``
+    contains a list of one or more schedule dictionaries. The values in each
+    dictionary are lists, where the elements in each list corresond to
+    eachother. The keys are:
 
-    lead_time_to_start : int, default 0
-        Number of hours from the ``init_date`` to the first interval needed in
-        the forecast.
+    - ``'start_date'``: date string, e.g., ``'2023-01-18 00:00'``, when the
+    schedule was first available.
+    - ``'end_hour'``: integer, e.g., ``144``, for the last forecast hour in
+    the schedule.
+    - ``'interval'``: number of hours in each interval of the schedule, e.g.,
+    ``3`` for a schedule with 3h steps.
+    - ``'first_cycle'``: integer hour of the day for the first cycle when the
+    schedule variation of the model runs, e.g., ``0`` for a model that first
+    initializes as 00z.
+    - ``'update_period'``: number of hours between cycles for the schdeule,
+    e.g., ``12`` for 12 hour updates.
+    - ``'delay_intercept'``: intercept of a fit between forecast delivery
+    delay in minutes and the forecast hour, e.g., ``515`` minutes. 
+    - ``'delay_slope'``: slope of a fit between forecast delivery delay in
+    minutes and the forecast hour, e.g., ``0.02`` for a model schedule that
+    delivers one  forecast hours per 0.02 minues (50 hours per minute).
+    - ``'product'``: string representing the model product for the schedule,
+    e.g., ``'oper'`` for ECMWF IFS 'oper' schedule.
+
     """
-
-    # convert to pandas datetime
-    available_date = pd.to_datetime(available_date)
-
-    # issue tz warning if available_date.tzinfo is None
-    if available_date.tzinfo is None:
-        available_date = available_date.tz_localize('UTC')
-        warnings.warn(
-            ("You have provided a timezone-naive available_date. "
-             "It has been converted to UTC. If you did not intend "
-             "to provide a time in UTC, please make available_date "
-             "timezone-aware or convert it to UTC."))
-
-    # round down to last hour
-    available_date_floor = available_date.floor('1h')
-
-    fxx_max_requested = run_length_needed + lead_time_to_start_needed
-
-    delay_buffer = 2
 
     # ===========================================================
     # Forecast Definitions
@@ -80,9 +61,9 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
         'end_hour': [144, 240, 90],
         'interval': [3, 6, 3],
         'first_cycle': [0, 0, 6],
-        'update_freq': [12, 12, 12],
-        'delay_to_first_fcast': [515, 515, 450],
-        'time_between_fcst_hrs': [0.006, 0.006, 0.006],
+        'update_period': [12, 12, 12],
+        'delay_intercept': [515, 515, 450],
+        'delay_slope': [0.006, 0.006, 0.006],
         'product': ['oper', 'oper', 'scda'],
     }
 
@@ -96,9 +77,9 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
         'end_hour': [144, 360, 90],
         'interval': [3, 6, 3],
         'first_cycle': [0, 0, 6],
-        'update_freq': [12, 12, 12],
-        'delay_to_first_fcast': [515, 515, 450],
-        'time_between_fcst_hrs': [0.006, 0.006, 0.006],
+        'update_period': [12, 12, 12],
+        'delay_intercept': [515, 515, 450],
+        'delay_slope': [0.006, 0.006, 0.006],
         'product': ['oper', 'oper', 'scda'],
     }
 
@@ -116,7 +97,7 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
         'start_date': ['2025-10-01 12:00',
                        '2025-10-01 12:00',
                        '2025-10-01 06:00'],
-        'delay_to_first_fcast': [455, 455, 390],
+        'delay_intercept': [455, 455, 390],
     }
 
     fcast_definition_ifs = {
@@ -141,9 +122,9 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
         'end_hour': [144, 240, 90],
         'interval': [3, 6, 3],
         'first_cycle': [0, 0, 6],
-        'update_freq': [12, 12, 12],
-        'delay_to_first_fcast': [520, 520, 484],  
-        'time_between_fcst_hrs': [0.02, 0.02, 0.03],
+        'update_period': [12, 12, 12],
+        'delay_intercept': [520, 520, 484],
+        'delay_slope': [0.02, 0.02, 0.03],
         'product': ['enfo', 'enfo', 'enfo'],
     }
 
@@ -161,11 +142,11 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
         'start_date': ['2025-10-01 12:00',
                        '2025-10-01 12:00',
                        '2025-10-01 06:00'],
-        'delay_to_first_fcast': [460, 460, 424],  
+        'delay_intercept': [460, 460, 424],
     }
 
     fcast_definition_ifs_ens = {
-        'Name': 'ifs',
+        'Name': 'ifs_ens',
         'Start Date of Schedule': ['2024-03-10 12:00',
                                    '2025-10-01 12:00'],
         'Forecast Schedule Dictionary': [fcast_sched_dict_ifs_ens_1,
@@ -178,9 +159,9 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
         'end_hour': [360],
         'interval': [6],
         'first_cycle': [0],
-        'update_freq': [6],
-        'delay_to_first_fcast': [339],
-        'time_between_fcst_hrs': [0.008],
+        'update_period': [6],
+        'delay_intercept': [339],
+        'delay_slope': [0.008],
         'product': ['aifs'],
     }
 
@@ -198,14 +179,14 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
         'end_hour': [360, 96],
         'interval': [6, 6],
         'first_cycle': [0, 6],
-        'update_freq': [12, 12],
-        'delay_to_first_fcast': [400, 400],
-        'time_between_fcst_hrs': [0.125, 0.125],
+        'update_period': [12, 12],
+        'delay_intercept': [400, 400],
+        'delay_slope': [0.125, 0.125],
         'product': ['enfo', 'enfo'],
     }
 
     fcast_definition_aifs_ens = {
-        'Name': 'aifs',
+        'Name': 'aifs_ens',
         'Start Date of Schedule': ['2025-07-03 00:00'],
         'Forecast Schedule Dictionary': [fcast_sched_dict_aifs_ens],
     }
@@ -219,9 +200,9 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
         'end_hour': [120],
         'interval': [1],
         'first_cycle': [0],
-        'update_freq': [12],
-        'delay_to_first_fcast': [600],
-        'time_between_fcst_hrs': [0.001],
+        'update_period': [12],
+        'delay_intercept': [600],
+        'delay_slope': [0.001],
         'product': ['cams'],
     }
 
@@ -238,9 +219,9 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
         'end_hour': [18, 48],
         'interval': [1, 1],
         'first_cycle': [0, 0],
-        'update_freq': [1, 6],
-        'delay_to_first_fcast': [61, 63],
-        'time_between_fcst_hrs': [1.862, 1.125],
+        'update_period': [1, 6],
+        'delay_intercept': [61, 63],
+        'delay_slope': [1.862, 1.125],
         'product': ['18h', '48h'],
     }
 
@@ -257,9 +238,9 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
         'end_hour': [120, 384],
         'interval': [1, 3],
         'first_cycle': [0, 0],
-        'update_freq': [6, 6],
-        'delay_to_first_fcast': [238, 238],
-        'time_between_fcst_hrs': [0.263, 0.263],
+        'update_period': [6, 6],
+        'delay_intercept': [238, 238],
+        'delay_slope': [0.263, 0.263],
         'product': ['pgrb2.0p25', 'pgrb2.0p25'],
     }
 
@@ -276,9 +257,9 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
         'end_hour': [384, 840],
         'interval': [3, 6],
         'first_cycle': [0, 0],
-        'update_freq': [6, 24],
-        'delay_to_first_fcast': [235, 265],
-        'time_between_fcst_hrs': [0.429, 0.332],
+        'update_period': [6, 24],
+        'delay_intercept': [235, 265],
+        'delay_slope': [0.429, 0.332],
         'product': ['3-hourly', 'extended'],  # needs update
     }
 
@@ -292,42 +273,124 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
 
     if model == 'gfs':
         fcast_definition = fcast_definition_gfs
-        delay_buffer = 12
 
     elif model == 'gefs':
         fcast_definition = fcast_definition_gefs
-        delay_buffer = 15
 
     elif model == 'hrrr':
         fcast_definition = fcast_definition_hrrr
-        delay_buffer = 2
 
     elif model == 'ifs':
         # IFS Single, ENS is handled separately
         fcast_definition = fcast_definition_ifs
-        delay_buffer = 15
 
     elif model == 'aifs':
         # AIFS single, ENS is handled separately
         fcast_definition = fcast_definition_aifs
-        delay_buffer = 15
 
     elif model == 'ifs_ens':
         fcast_definition = fcast_definition_ifs_ens
-        delay_buffer = 15
 
     elif model == 'aifs_ens':
         fcast_definition = fcast_definition_aifs_ens
-        delay_buffer = 15
 
     elif model == 'cams':
         fcast_definition = fcast_definition_cams
-        delay_buffer = 15
+
+    return fcast_definition
+
+
+def adjust_forecast_datetimes(available_date, run_length_needed,
+                              lead_time_to_start_needed, model='gfs'):
+    """
+    Helper function to adjust datetimes for use in
+    `hefty.utilities.model_input_formatter`.
+
+    [longer description]
+
+    Parameters
+    ----------
+    available_date : pandas-parsable datetime
+        Datetime at which the forecast outputs need to be available, assumed
+        to be in UTC unless a timezone-aware value is provided.
+
+    run_length_needed : int
+        Length of the forecast that is needed, in hours, starting from the
+        ``lead_time_to_start``.
+
+    lead_time_to_start_needed : int, default 0
+        Number of hours from the ``available_date`` (after rounding down to the
+        hour) to the targetted first interval in the forecast.
+
+    model : {'gfs', 'ifs', 'aifs', 'hrrr', 'gefs', 'ifs_ens', 'aifs_ens'}
+        Forecast model name. Default is 'gfs'.
+
+    Returns
+    -------
+    init_date : pandas-parsable datetime
+        Model initialization datetime, adjusted to be the first time *before*
+        the specified ``available_date`` for which model outputs are estimated
+        to be available. Accounts for standard model initialization times and
+        estimated delays between initilization and output availability
+        time for the selected model. For example, GEFS has initilization
+        times of 00:00, 06:00, 12:00, and 18:00 UTC, and model outputs are
+        only available 3.5 to 6 hours after initialization. The function
+        :py:func:`hefty.utilities.adjust_forecast_datetimes` can help with
+        determining correct times to use.
+
+    run_length : int
+        Length of the forecast in hours, relative to the returned
+        ``lead_time_to_start``.
+
+    lead_time_to_start : int
+        Number of hours from the ``init_date`` to the first interval needed in
+        the forecast.
+    """
+
+    # convert to pandas datetime
+    available_date = pd.to_datetime(available_date)
+
+    # issue tz warning if available_date.tzinfo is None
+    if available_date.tzinfo is None:
+        available_date = available_date.tz_localize('UTC')
+        warnings.warn(
+            ("You have provided a timezone-naive available_date. "
+             "It has been converted to UTC. If you did not intend "
+             "to provide a time in UTC, please make available_date "
+             "timezone-aware or convert it to UTC."))
 
     # round down to last hour
     available_date_floor = available_date.floor('1h')
 
     fxx_max_requested = run_length_needed + lead_time_to_start_needed
+
+    delay_buffer = 2
+
+    fcast_definition = get_fcast_definition(model=model)
+
+    if model == 'gfs':
+        delay_buffer = 12
+
+    elif model == 'gefs':
+        delay_buffer = 15
+
+    elif model == 'hrrr':
+        delay_buffer = 2
+
+    elif model == 'ifs':
+        delay_buffer = 15
+
+    elif model == 'aifs':
+        delay_buffer = 15
+
+    elif model == 'ifs_ens':
+        delay_buffer = 15
+
+    elif model == 'aifs_ens':
+        delay_buffer = 15
+
+    elif model == 'cams':
+        delay_buffer = 15
 
     # Find appropriate schedule (latest start date before available_date)
     sched_start_dates = [pd.Timestamp(x, tz='UTC') for x in
@@ -341,11 +404,11 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
     # max possible forecast hour, delay
     max_model_fxx = max(sched['end_hour'])
     idx = sched['end_hour'].index(max_model_fxx)
-    delay_to_first_fcast = sched['delay_to_first_fcast'][idx]
-    time_between_fcst_hrs = sched['time_between_fcst_hrs'][idx]
+    delay_intercept = sched['delay_intercept'][idx]
+    delay_slope = sched['delay_slope'][idx]
     max_delay_minutes = (
-        delay_to_first_fcast +
-        (time_between_fcst_hrs * max_model_fxx) +
+        delay_intercept +
+        (delay_slope * max_model_fxx) +
         delay_buffer
     )
     # max possible delay in hours, rounded up (ceiling)
@@ -364,8 +427,8 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
     cycle_list = []
     for variation in range(len(sched['start_date'])):
         first_cycle = sched['first_cycle'][variation]
-        update_freq = sched['update_freq'][variation]
-        cycle_list += list(range(first_cycle, 24, update_freq))
+        update_period = sched['update_period'][variation]
+        cycle_list += list(range(first_cycle, 24, update_period))
     cycle_list = list(set(cycle_list))  # remove duplicates w/ set()
     cycle_list = sorted(cycle_list)  # sort
 
@@ -406,14 +469,14 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
 
         for variation in range(len(sched['start_date'])):
             first_cycle = sched['first_cycle'][variation]
-            update_freq = sched['update_freq'][variation]
+            update_period = sched['update_period'][variation]
             start_hour = sched['start_hour'][variation]
             end_hour = sched['end_hour'][variation]
             interval = sched['interval'][variation]
-            delay_to_first_fcast = sched['delay_to_first_fcast'][variation]
-            time_between_fcst_hrs = sched['time_between_fcst_hrs'][variation]
+            delay_intercept = sched['delay_intercept'][variation]
+            delay_slope = sched['delay_slope'][variation]
             # list of cycles that this variation represents
-            variation_cycles = list(range(first_cycle, 24, update_freq))
+            variation_cycles = list(range(first_cycle, 24, update_period))
             if cycle in variation_cycles:
 
                 # if we aren't in the last list in the forecast schedule
@@ -443,8 +506,8 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
                     fxx_max = interval * math.ceil(fxx_max/interval)
                 if fxx_max <= end_hour:
                     delay_minutes = (
-                        delay_to_first_fcast +
-                        (time_between_fcst_hrs * fxx_max) +
+                        delay_intercept +
+                        (delay_slope * fxx_max) +
                         delay_buffer
                     )
 
