@@ -162,7 +162,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                             member=member,
                             priority=priority
                             ).xarray(search_str, overwrite=True)
-                except Exception:
+                except Exception as e:
+                    print(e)
                     if attempts_remaining:
                         print('attempt ' + str(attempt_num)
                               + ' failed, pause for '
@@ -709,7 +710,8 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                     ds_dict[j] = FH.xarray(search_string_list[j],
                                            remove_grib=True,
                                            overwrite=True)
-            except Exception:
+            except Exception as e:
+                print(e)
                 if attempts_remaining:
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
@@ -1079,7 +1081,8 @@ def get_solar_forecast_ensemble_subset(
                                     fxx=fxx_range,
                                     priority=priority).xarray(search_str,
                                                               overwrite=True)
-            except Exception:
+            except Exception as e:
+                print(e)
                 if attempts_remaining:
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
@@ -1232,7 +1235,8 @@ def get_solar_forecast_ensemble_subset(
                                 fxx=fxx_range,
                                 priority=priority).xarray(search_str,
                                                       overwrite=True)
-        except Exception:
+        except Exception as e:
+            print(e)
             if attempts_remaining:
                 print('attempt ' + str(attempt_num) + ' failed, pause for '
                       + str((attempt_num)**2) + ' min')
@@ -1446,7 +1450,8 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                     priority=priority)
                     FH.download(search_str, overwrite=True)
                     ds = FH.xarray(search_str, remove_grib=False)
-            except Exception:
+            except Exception as e:
+                print(e)
                 if attempts_remaining:
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
@@ -1619,7 +1624,8 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                     )
                     FH.download(search_str, overwrite=True)
                     ds = FH.xarray(search_str, remove_grib=False)
-            except Exception:
+            except Exception as e:
+                print(e)
                 if attempts_remaining:
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
@@ -1725,7 +1731,8 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                         priority=priority)
                         FH.download(search_str, overwrite=True)
                         ds = FH.xarray(search_str, remove_grib=False)
-                except Exception:
+                except Exception as e:
+                    print(e)
                     if attempts_remaining:
                         print('attempt ' + str(attempt_num) + ' failed'
                               + ', pause for ' + str((attempt_num)**2)
@@ -1909,7 +1916,8 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                     priority=priority)
                     FH.download(search_str, overwrite=True)
                     ds = FH.xarray(search_str, remove_grib=False)
-            except Exception:
+            except Exception as e:
+                print(e)
                 if attempts_remaining:
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
