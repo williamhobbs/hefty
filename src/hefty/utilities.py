@@ -115,13 +115,17 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
                          "changed to 3 h."))
 
             if fxx_max <= 240:
-                product = 'atmos.25'  # 0.25 deg, 'pgrb2.0p25'
+                product = 'atmos.25'  # 0.25 deg, 'pgrb2a.0p25'
                 search_str = 'DSWRF|:TMP:2 m above|[UV]GRD:10 m above'
             else:
-                product = 'atmos.5'  # 0.5 deg, 'pgrb2.0p5'
+                product = 'atmos.5'  # 0.5 deg, 'pgrb2a.0p5'
                 search_str = 'DSWRF|:TMP:2 m above|[UV]GRD:10 m above'
         elif resource_type == 'wind':
-            product = 'atmos.5b'  # 0.5 deg, 'pgrb2.0p5
+            # 2m temp and 10m wind are in pgrb2a, but 80 and 100m are in
+            # pgrb2b (secondary parameters), so we will just get 80 and 100
+            # to speed things up. Could have a second query for 2m and 10m
+            # if needed
+            product = 'atmos.5b'  # 0.5 deg, 'pgrb2b.0p5
             search_str = (
                 '[UV]GRD:80 m above|[UV]GRD:100 m above|'
                 ':TMP:80 m above|PRES:80 m above'
