@@ -162,7 +162,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                             member=member,
                             priority=priority
                             ).xarray(search_str, overwrite=True)
-                except Exception:
+                except Exception as e:
+                    print(e)
                     if attempts_remaining:
                         print('attempt ' + str(attempt_num)
                               + ' failed, pause for '
@@ -195,22 +196,22 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                     )
                 )
             )
-            ts = xr.concat(i, dim="valid_time")  # concatenate
-            # rename 'ssrd' to 'sdswrf' in ifs/aifs
-            if model == 'ifs' or model == 'aifs':
-                ts = ts.rename({'ssrd': 'sdswrf'})
-            # convert to dataframe
-            if model == 'hrrr':  # include direct, vbdsf
-                df_temp = ts.to_dataframe()[['sdswrf', 'vbdsf',
-                                             't2m', 'si10']]
-            else:
-                df_temp = ts.to_dataframe()[['sdswrf', 't2m', 'si10']]
-            # add timezone
-            df_temp = df_temp.tz_localize('UTC', level='valid_time')
-            # rename wind speed
-            df_temp = df_temp.rename(columns={'si10': 'wind_speed'})
-            # convert air temperature units
-            df_temp['temp_air'] = df_temp['t2m'] - 273.15
+        ts = xr.concat(i, dim="valid_time")  # concatenate
+        # rename 'ssrd' to 'sdswrf' in ifs/aifs
+        if model == 'ifs' or model == 'aifs':
+            ts = ts.rename({'ssrd': 'sdswrf'})
+        # convert to dataframe
+        if model == 'hrrr':  # include direct, vbdsf
+            df_temp = ts.to_dataframe()[['sdswrf', 'vbdsf',
+                                            't2m', 'si10']]
+        else:
+            df_temp = ts.to_dataframe()[['sdswrf', 't2m', 'si10']]
+        # add timezone
+        df_temp = df_temp.tz_localize('UTC', level='valid_time')
+        # rename wind speed
+        df_temp = df_temp.rename(columns={'si10': 'wind_speed'})
+        # convert air temperature units
+        df_temp['temp_air'] = df_temp['t2m'] - 273.15
 
     elif model == 'cams':
         if not _has_cdsapi:
@@ -709,7 +710,8 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                     ds_dict[j] = FH.xarray(search_string_list[j],
                                            remove_grib=True,
                                            overwrite=True)
-            except Exception:
+            except Exception as e:
+                print(e)
                 if attempts_remaining:
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
@@ -993,7 +995,7 @@ def get_solar_forecast_ensemble_subset(
         Number of hours between init_date (initialization) and
         the first forecasted interval.
 
-    model : string, default 'ifs'
+    model : string, default 'ifs_ens'
         Forecast model. Default and only option is ECMWF IFS ('ifs'). NOAA
         GEFS may be added in the future.
 
@@ -1034,8 +1036,10 @@ def get_solar_forecast_ensemble_subset(
     }
 
     # check model
-    if model.casefold() != ('ifs').casefold():
-        raise ValueError('model must be ifs, you entered ' + model)
+    if model.casefold() != ('ifs_ens').casefold():
+        raise ValueError('model must be ifs_ens, you entered ' + model)
+
+    model_herbie = 'ifs'  # this is the model name Herbie uses
 
     # variable formatting
     # if lat, lon are single values, convert to lists for pickpoints later
@@ -1064,7 +1068,7 @@ def get_solar_forecast_ensemble_subset(
                 if attempt_num == 1:
                     # try downloading
                     ds = FastHerbie(DATES=[init_date],
-                                    model=model,
+                                    model=model_herbie,
                                     product='enfo',
                                     fxx=fxx_range,
                                     priority=priority).xarray(search_str)
@@ -1072,12 +1076,13 @@ def get_solar_forecast_ensemble_subset(
                     # after first attempt, set overwrite=True to overwrite
                     # partial files
                     ds = FastHerbie(DATES=[init_date],
-                                    model=model,
+                                    model=model_herbie,
                                     product='enfo',
                                     fxx=fxx_range,
                                     priority=priority).xarray(search_str,
                                                               overwrite=True)
-            except Exception:
+            except Exception as e:
+                print(e)
                 if attempts_remaining:
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
@@ -1217,18 +1222,21 @@ def get_solar_forecast_ensemble_subset(
             if attempt_num == 1:
                 # try downloading
                 ds = FastHerbie(DATES=[init_date],
-                                model=model,
+                                model=model_herbie,
                                 product='enfo',
-                                fxx=fxx_range).xarray(search_str)
+                                fxx=fxx_range,
+                                priority=priority).xarray(search_str)
             else:
                 # after first attempt, set overwrite=True to overwrite
                 # partial files
                 ds = FastHerbie(DATES=[init_date],
-                                model=model,
+                                model=model_herbie,
                                 product='enfo',
-                                fxx=fxx_range).xarray(search_str,
+                                fxx=fxx_range,
+                                priority=priority).xarray(search_str,
                                                       overwrite=True)
-        except Exception:
+        except Exception as e:
+            print(e)
             if attempts_remaining:
                 print('attempt ' + str(attempt_num) + ' failed, pause for '
                       + str((attempt_num)**2) + ' min')
@@ -1308,7 +1316,7 @@ def get_solar_forecast_ensemble_subset(
 
 
 def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
-                                lead_time_to_start=0, model='ifs',
+                                lead_time_to_start=0, model='ifs_ens',
                                 attempts=2, priority=None):
     """
     Get solar resource forecasts for one or several sites using all ensemble
@@ -1316,8 +1324,10 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
     small subset of ensemble members, e.g., much less that 25% of members.
     This function uses Herbie's FastHerbie [1]_ and pvlib [2]_. It currently
     only works with a single init_date, not a list of dates like FastHerbie
-    can use. Temperature data comes from the ensemble mean, and wind speed is
-    currently just a filler value of 2 m/s to save time.
+    can use. Temperature data comes from the ensemble mean for GEFS, the
+    control member for IFS (mean is available and could be used), and the
+    first member for AIFS (mean and control do not seem to be available). Wind
+    speed is currently just a filler value of 2 m/s to save time.
 
     Parameters
     ----------
@@ -1339,9 +1349,9 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
         Number of hours between init_date (initialization) and
         the first forecasted interval.
 
-    model : string, default 'ifs'
-        Forecast model. Can be ECMWF IFS ('ifs'), ECMWF AIFS ('aifs'), or NOAA
-        GEFS ('gefs').
+    model : string, default 'ifs_ens'
+        Forecast model. Can be ECMWF IFS Ensemble ('ifs_ens'), ECMWF AIFS
+        Ensemble ('aifs_ens'), or NOAA GEFS ('gefs').
 
     attempts : int, optional
         Number of times to try getting forecast data. The function will pause
@@ -1378,12 +1388,20 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
 
     # check model
     if (
-        model.casefold() != ('ifs').casefold() and
-        model.casefold() != ('aifs').casefold() and
+        model.casefold() != ('ifs_ens').casefold() and
+        model.casefold() != ('aifs_ens').casefold() and
         model.casefold() != ('gefs').casefold()
     ):
-        raise ValueError(('model must be ifs, aifs, or gefs, you entered '
-                          + model))
+        raise ValueError(('model must be ifs_ens, aifs_ens, or gefs, you '
+                          'entered ' + model))
+
+    # model_herbie is the model name Herbie uses
+    if model == 'ifs_ens':
+        model_herbie = 'ifs'
+    elif model == 'aifs_ens':
+        model_herbie = 'aifs'
+    elif model == 'gefs':
+        model_herbie = 'gefs'
 
     # variable formatting
     # if lat, lon are single values, convert to lists for pickpoints later
@@ -1400,7 +1418,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
         init_date, run_length, lead_time_to_start, model)
 
     # ifs/aifs workflow
-    if model == 'ifs' or model == 'aifs':
+    if model == 'ifs_ens' or model == 'aifs_ens':
         # get GHI data for all IFS ensemble members (not the mean)
         # search for ":ssrd:sfc:" and NOT ":ssrd:sfc:g"
         # (the "g" is right after sfc if there is no member number)
@@ -1415,7 +1433,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 if attempt_num == 1:
                     # try downloading
                     FH = FastHerbie(DATES=[init_date],
-                                    model=model,
+                                    model=model_herbie,
                                     product='enfo',
                                     fxx=fxx_range,
                                     priority=priority)
@@ -1426,13 +1444,14 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                     # partial files
                     # try downloading
                     FH = FastHerbie(DATES=[init_date],
-                                    model=model,
+                                    model=model_herbie,
                                     product='enfo',
                                     fxx=fxx_range,
                                     priority=priority)
                     FH.download(search_str, overwrite=True)
                     ds = FH.xarray(search_str, remove_grib=False)
-            except Exception:
+            except Exception as e:
+                print(e)
                 if attempts_remaining:
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
@@ -1568,8 +1587,14 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
         # convert to dataframe
         df_60min_irr = pd.concat(dfs)
 
-        # get deterministic temp_air
-        search_str = ':2t:sfc:g:0001:od:cf:enfo'
+        if model == 'ifs_ens':
+            # get deterministic temp_air using ifs control member
+            search_str = ':2t:sfc:g:0001:od:cf:enfo'
+            get_control = None
+        elif model == 'aifs_ens':
+            search_str = ':2t:sfc:'
+            # Herbie kwarg to get control member, https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html#AIFS-Ensembles
+            get_control = True
 
         # try n times based loosely on
         # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
@@ -1579,21 +1604,28 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 if attempt_num == 1:
                     # try downloading
                     FH = FastHerbie(DATES=[init_date],
-                                    model=model,
+                                    model=model_herbie,
                                     product='enfo',
-                                    fxx=fxx_range)
+                                    fxx=fxx_range,
+                                    priority=priority,
+                                    get_control=get_control,
+                                    )
                     FH.download(search_str)
                     ds = FH.xarray(search_str, remove_grib=False)
                 else:
                     # after first attempt, set overwrite=True to overwrite
                     # partial files
                     FH = FastHerbie(DATES=[init_date],
-                                    model=model,
+                                    model=model_herbie,
                                     product='enfo',
-                                    fxx=fxx_range)
+                                    fxx=fxx_range,
+                                    priority=priority,
+                                    get_control=get_control,
+                                    )
                     FH.download(search_str, overwrite=True)
                     ds = FH.xarray(search_str, remove_grib=False)
-            except Exception:
+            except Exception as e:
+                print(e)
                 if attempts_remaining:
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
@@ -1681,23 +1713,26 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                     if attempt_num == 1:
                         # try downloading
                         FH = FastHerbie(DATES=[init_date],
-                                        model=model,
+                                        model=model_herbie,
                                         product=product,
                                         fxx=fxx_range,
-                                        member=member_list[x])
+                                        member=member_list[x],
+                                        priority=priority)
                         FH.download(search_str)
                         ds = FH.xarray(search_str, remove_grib=False)
                     else:
                         # after first attempt, set overwrite=True to overwrite
                         # partial files
                         FH = FastHerbie(DATES=[init_date],
-                                        model=model,
+                                        model=model_herbie,
                                         product=product,
                                         fxx=fxx_range,
-                                        member=member_list[x])
+                                        member=member_list[x],
+                                        priority=priority)
                         FH.download(search_str, overwrite=True)
                         ds = FH.xarray(search_str, remove_grib=False)
-                except Exception:
+                except Exception as e:
+                    print(e)
                     if attempts_remaining:
                         print('attempt ' + str(attempt_num) + ' failed'
                               + ', pause for ' + str((attempt_num)**2)
@@ -1863,23 +1898,26 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 if attempt_num == 1:
                     # try downloading
                     FH = FastHerbie(DATES=[init_date],
-                                    model=model,
+                                    model=model_herbie,
                                     product=product,
                                     fxx=fxx_range,
-                                    member=member)
+                                    member=member,
+                                    priority=priority)
                     FH.download(search_str)
                     ds = FH.xarray(search_str, remove_grib=False)
                 else:
                     # after first attempt, set overwrite=True to overwrite
                     # partial files
                     FH = FastHerbie(DATES=[init_date],
-                                    model=model,
+                                    model=model_herbie,
                                     product=product,
                                     fxx=fxx_range,
-                                    member=member)
+                                    member=member,
+                                    priority=priority)
                     FH.download(search_str, overwrite=True)
                     ds = FH.xarray(search_str, remove_grib=False)
-            except Exception:
+            except Exception as e:
+                print(e)
                 if attempts_remaining:
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
