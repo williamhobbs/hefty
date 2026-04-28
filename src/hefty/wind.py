@@ -24,7 +24,11 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
         negative to west.
 
     init_date : pandas-parsable datetime
-        Model initialization datetime.
+        Model initialization datetime. Note that this should be UTC and on the
+        hour for the models currently available with hefty, and most models
+        don't initialize every hour. See
+        :py:func:`hefty.utilities.adjust_forecast_datetimes` for help
+        determining appropriate init_date values.
 
     run_length : int
         Length of the forecast in hours - number of hours forecasted
@@ -100,6 +104,13 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
 
+    # check if init_date is top of hour
+    if init_date != init_date.floor('1h'):
+        raise ValueError(f'init_date must be on the hour, e.g., '
+                         f'{init_date.floor('1h')}, not {init_date}. '
+                         'Consider using init_date.floor("1h") or '
+                         'similar')
+
     # get model-specific Herbie inputs
     date, fxx_range, product, search_str = model_input_formatter(
         init_date, run_length, lead_time_to_start, model, resource_type='wind')
@@ -133,15 +144,17 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
                         member=member,
                         priority=priority
                         ).xarray(search_str, overwrite=True)
-            except Exception:
+            except Exception as e:
+                print(e)
                 if attempts_remaining:
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
                     time.sleep(60*(attempt_num)**2)
+                else:
+                    raise ValueError(f'download failed, ran out of '
+                                        f'attempts with error: {e}')
             else:
                 break
-        else:
-            raise ValueError('download failed, ran out of attempts')
 
         # merge - override avoids hight conflict between 2m temp and 10m wind
         ds = xr.merge(ds, compat='override')

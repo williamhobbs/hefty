@@ -36,7 +36,11 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         negative to west.
 
     init_date : pandas-parsable datetime
-        Model initialization datetime.
+        Model initialization datetime. Note that this should be UTC and on the
+        hour for the models currently available with hefty, and most models
+        don't initialize every hour. See
+        :py:func:`hefty.utilities.adjust_forecast_datetimes` for help
+        determining appropriate init_date values.
 
     run_length : int
         Length of the forecast in hours - number of hours forecasted
@@ -127,6 +131,13 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
 
+    # check if init_date is top of hour
+    if init_date != init_date.floor('1h'):
+        raise ValueError(f'init_date must be on the hour, e.g., '
+                         f'{init_date.floor('1h')}, not {init_date}. '
+                         'Consider using init_date.floor("1h") or '
+                         'similar')
+
     # get model-specific Herbie inputs
     date, fxx_range, product, search_str = model_input_formatter(
         init_date, run_length, lead_time_to_start, model)
@@ -169,10 +180,11 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                               + ' failed, pause for '
                               + str((attempt_num)**2) + ' min')
                         time.sleep(60*(attempt_num)**2)
+                    else:
+                        raise ValueError(f'download failed, ran out of '
+                                         f'attempts with error: {e}')
                 else:
                     break
-            else:
-                raise ValueError('download failed, ran out of attempts')
 
             # merge - override avoids hight conflict between 2m temp and 10m
             # wind
@@ -203,7 +215,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         # convert to dataframe
         if model == 'hrrr':  # include direct, vbdsf
             df_temp = ts.to_dataframe()[['sdswrf', 'vbdsf',
-                                            't2m', 'si10']]
+                                         't2m', 'si10']]
         else:
             df_temp = ts.to_dataframe()[['sdswrf', 't2m', 'si10']]
         # add timezone
@@ -597,7 +609,11 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         negative to west.
 
     init_date : pandas-parsable datetime
-        Model initialization datetime.
+        Model initialization datetime. Note that this should be UTC and on the
+        hour for the models currently available with hefty, and most models
+        don't initialize every hour. See
+        :py:func:`hefty.utilities.adjust_forecast_datetimes` for help
+        determining appropriate init_date values.
 
     run_length : int
         Length of the forecast in hours - number of hours forecasted
@@ -680,6 +696,13 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
 
+    # check if init_date is top of hour
+    if init_date != init_date.floor('1h'):
+        raise ValueError(f'init_date must be on the hour, e.g., '
+                         f'{init_date.floor('1h')}, not {init_date}. '
+                         'Consider using init_date.floor("1h") or '
+                         'similar')
+
     # get model-specific Herbie inputs
     date, fxx_range, product, search_str = model_input_formatter(
         init_date, run_length, lead_time_to_start, model)
@@ -716,10 +739,11 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
                     time.sleep(60*(attempt_num)**2)
+                else:
+                    raise ValueError(f'download failed, ran out of attempts '
+                                     f'with error: {e}')
             else:
                 break
-        else:
-            raise ValueError('download failed, ran out of attempts')
 
         # merge - override avoids hight conflict between 2m temp and 10m wind
         ds = xr.merge(ds_dict.values(), compat='override')
@@ -986,7 +1010,11 @@ def get_solar_forecast_ensemble_subset(
         negative to west.
 
     init_date : pandas-parsable datetime
-        Model initialization datetime.
+        Model initialization datetime. Note that this should be UTC and on the
+        hour for the models currently available with hefty, and most models
+        don't initialize every hour. See
+        :py:func:`hefty.utilities.adjust_forecast_datetimes` for help
+        determining appropriate init_date values.
 
     run_length : int
         Length of the forecast in hours - number of hours forecasted
@@ -1050,6 +1078,13 @@ def get_solar_forecast_ensemble_subset(
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
 
+    # check if init_date is top of hour
+    if init_date != init_date.floor('1h'):
+        raise ValueError(f'init_date must be on the hour, e.g., '
+                         f'{init_date.floor('1h')}, not {init_date}. '
+                         'Consider using init_date.floor("1h") or '
+                         'similar')
+
     # get model-specific Herbie inputs, except product and search string,
     # which are unique for the ensemble
     init_date, fxx_range, _, _ = model_input_formatter(
@@ -1087,10 +1122,11 @@ def get_solar_forecast_ensemble_subset(
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
                     time.sleep(60*(attempt_num)**2)
+                else:
+                    raise ValueError(f'download failed, ran out of attempts '
+                                     f'with error: {e}')
             else:
                 break
-        else:
-            raise ValueError('download failed, ran out of attempts')
 
         # use pick_points for single point or list of points
         ds2 = ds.herbie.pick_points(pd.DataFrame({
@@ -1234,17 +1270,18 @@ def get_solar_forecast_ensemble_subset(
                                 product='enfo',
                                 fxx=fxx_range,
                                 priority=priority).xarray(search_str,
-                                                      overwrite=True)
+                                                          overwrite=True)
         except Exception as e:
             print(e)
             if attempts_remaining:
                 print('attempt ' + str(attempt_num) + ' failed, pause for '
                       + str((attempt_num)**2) + ' min')
                 time.sleep(60*(attempt_num)**2)
+            else:
+                raise ValueError(f'download failed, ran out of attempts '
+                                 f'with error: {e}')
         else:
             break
-    else:
-        raise ValueError('download failed, ran out of attempts')
 
     # use pick_points for single point or list of points
     ds2 = ds.herbie.pick_points(pd.DataFrame({
@@ -1340,7 +1377,11 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
         negative to west.
 
     init_date : pandas-parsable datetime
-        Model initialization datetime.
+        Model initialization datetime. Note that this should be UTC and on the
+        hour for the models currently available with hefty, and most models
+        don't initialize every hour. See
+        :py:func:`hefty.utilities.adjust_forecast_datetimes` for help
+        determining appropriate init_date values.
 
     run_length : int
         Length of the forecast in hours - number of hours forecasted
@@ -1412,6 +1453,13 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
 
+    # check if init_date is top of hour
+    if init_date != init_date.floor('1h'):
+        raise ValueError(f'init_date must be on the hour, e.g., '
+                         f'{init_date.floor('1h')}, not {init_date}. '
+                         'Consider using init_date.floor("1h") or '
+                         'similar')
+
     # get model-specific Herbie inputs, except product and search string,
     # which are unique for the ensemble
     init_date, fxx_range, product, search_str = model_input_formatter(
@@ -1456,10 +1504,11 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
                     time.sleep(60*(attempt_num)**2)
+                else:
+                    raise ValueError(f'download failed, ran out of attempts '
+                                     f'with error: {e}')
             else:
                 break
-        else:
-            raise ValueError('download failed, ran out of attempts')
 
         # use pick_points for single point or list of points
         ds2 = ds.herbie.pick_points(pd.DataFrame({
@@ -1630,10 +1679,11 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
                     time.sleep(60*(attempt_num)**2)
+                else:
+                    raise ValueError(f'download failed, ran out of attempts '
+                                     f'with error: {e}')
             else:
                 break
-        else:
-            raise ValueError('download failed, ran out of attempts')
 
         # use pick_points for single point or list of points
         ds2 = ds.herbie.pick_points(pd.DataFrame({
@@ -1738,10 +1788,11 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                               + ', pause for ' + str((attempt_num)**2)
                               + ' min')
                         time.sleep(60*(attempt_num)**2)
+                    else:
+                        raise ValueError(f'download failed, ran out of '
+                                         f'attempts with error: {e}')
                 else:
                     break
-            else:
-                raise ValueError('download failed, ran out of attempts')
 
             # use pick_points for single point or list of points
             ds2 = ds.herbie.pick_points(pd.DataFrame({
@@ -1922,10 +1973,11 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                     print('attempt ' + str(attempt_num) + ' failed, pause for '
                           + str((attempt_num)**2) + ' min')
                     time.sleep(60*(attempt_num)**2)
+                else:
+                    raise ValueError(f'download failed, ran out of '
+                                     f'attempts with error: {e}')
             else:
                 break
-        else:
-            raise ValueError('download failed, ran out of attempts')
 
         # use pick_points for single point or list of points
         ds2 = ds.herbie.pick_points(pd.DataFrame({
