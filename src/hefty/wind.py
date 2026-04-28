@@ -145,6 +145,24 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
 
         # merge - override avoids hight conflict between 2m temp and 10m wind
         ds = xr.merge(ds, compat='override')
+
+        # addresses GH#41, https://github.com/blaylockbk/Herbie/issues/533
+        # check to see if an older version of eccodes (<=2.44.0) is being used
+        # if it is, for gfs and gefs, variables 'u100' and 'v100' will be in
+        # the dataset. if not (meaning eccodes>=2.45.0), manually rename those
+        # variables before merging.
+        old_eccodes = True
+        if model == 'gfs' or model == 'gefs':
+            ds_var_list = [i for i in ds.data_vars]
+            if 'u100' not in ds_var_list:
+                old_eccodes = False
+                ds100 = (ds.sel(heightAboveGround=100)[['u', 'v']].
+                         rename_vars({'u': 'u100', 'v': 'v100'}))
+                ds80 = (ds.sel(heightAboveGround=80)[['u', 'v']].
+                        rename_vars({'u': 'u80', 'v': 'v80'}))
+                ds = xr.merge([ds.drop_vars(['u', 'v']), ds100, ds80],
+                              compat='override')
+
         # calculate wind speed from u and v components
         ds = ds.herbie.with_wind('both')
 
@@ -167,47 +185,91 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
     ts = xr.concat(i, dim="valid_time")  # concatenate
 
     # convert to dataframe, convert names and units
-    if model == 'gfs':
-        df_temp = ts.to_dataframe()[
-            ['si10',
-             'ws',
-             'si100',
-             'wdir10',
-             'wdir',
-             'wdir100',
-             # 't2m', # not really needed but could be used
-             't',
-             # 'sp', # not really needed but could be used
-             'pres']
-            ]
-        # df_temp['t2m'] = df_temp['t2m'] - 273.15
-        df_temp['t'] = df_temp['t'] - 273.15
-        df_temp.rename(columns={
-            'si10': 'wind_speed_10m',
-            'ws': 'wind_speed_80m',
-            'si100': 'wind_speed_100m',
-            'wdir10': 'wind_direction_10m',
-            'wdir': 'wind_direction_80m',
-            'wdir100': 'wind_direction_100m',
-            # 't2m': 'temp_air_2m', # not really needed but could be used
-            't': 'temp_air_80m',
-            # 'sp': 'pressure_0m', # not really needed but could be used
-            'pres': 'pressure_80m',
-            }, inplace=True)
-    elif model == 'gefs':
-        df_temp = ts.to_dataframe()[
-            ['ws', 'si100', 'wdir', 'wdir100', 't', 'pres']
-            ]
-        df_temp['t'] = df_temp['t'] - 273.15
-        df_temp.rename(columns={
-            'ws': 'wind_speed_80m',
-            'si100': 'wind_speed_100m',
-            'wdir': 'wind_direction_80m',
-            'wdir100': 'wind_direction_100m',
-            't': 'temp_air_80m',
-            'pres': 'pressure_80m',
-            }, inplace=True)
-    elif model == 'hrrr':
+    # variable names for gfs and gefs will now be different depending on
+    # the eccodes version and possible renaming above.
+    if old_eccodes:
+        if model == 'gfs':
+            df_temp = ts.to_dataframe()[
+                ['si10',
+                 'ws',
+                 'si100',
+                 'wdir10',
+                 'wdir',
+                 'wdir100',
+                 't2m',  # could be removed
+                 't',
+                 'sp',  # could be removed
+                 'pres']
+                ]
+            # df_temp['t2m'] = df_temp['t2m'] - 273.15
+            df_temp['t'] = df_temp['t'] - 273.15
+            df_temp.rename(columns={
+                'si10': 'wind_speed_10m',
+                'ws': 'wind_speed_80m',
+                'si100': 'wind_speed_100m',
+                'wdir10': 'wind_direction_10m',
+                'wdir': 'wind_direction_80m',
+                'wdir100': 'wind_direction_100m',
+                't2m': 'temp_air_2m',  # could be removed
+                't': 'temp_air_80m',
+                'sp': 'pressure_0m',  # could be removed
+                'pres': 'pressure_80m',
+                }, inplace=True)
+        elif model == 'gefs':
+            df_temp = ts.to_dataframe()[
+                ['ws', 'si100', 'wdir', 'wdir100', 't', 'pres']
+                ]
+            df_temp['t'] = df_temp['t'] - 273.15
+            df_temp.rename(columns={
+                'ws': 'wind_speed_80m',
+                'si100': 'wind_speed_100m',
+                'wdir': 'wind_direction_80m',
+                'wdir100': 'wind_direction_100m',
+                't': 'temp_air_80m',
+                'pres': 'pressure_80m',
+                }, inplace=True)
+    else:
+        if model == 'gfs':
+            df_temp = ts.to_dataframe()[
+                ['si10',
+                 'si80',
+                 'si100',
+                 'wdir10',
+                 'wdir80',
+                 'wdir100',
+                 't2m',  # could be removed
+                 't',
+                 'sp',  # could be removed
+                 'pres']
+                ]
+            # df_temp['t2m'] = df_temp['t2m'] - 273.15
+            df_temp['t'] = df_temp['t'] - 273.15
+            df_temp.rename(columns={
+                'si10': 'wind_speed_10m',
+                'si80': 'wind_speed_80m',
+                'si100': 'wind_speed_100m',
+                'wdir10': 'wind_direction_10m',
+                'wdir80': 'wind_direction_80m',
+                'wdir100': 'wind_direction_100m',
+                't2m': 'temp_air_2m',  # could be removed
+                't': 'temp_air_80m',
+                'sp': 'pressure_0m',  # could be removed
+                'pres': 'pressure_80m',
+                }, inplace=True)
+        elif model == 'gefs':
+            df_temp = ts.to_dataframe()[
+                ['si80', 'si100', 'wdir80', 'wdir100', 't', 'pres']
+                ]
+            df_temp['t'] = df_temp['t'] - 273.15
+            df_temp.rename(columns={
+                'si80': 'wind_speed_80m',
+                'si100': 'wind_speed_100m',
+                'wdir80': 'wind_direction_80m',
+                'wdir100': 'wind_direction_100m',
+                't': 'temp_air_80m',
+                'pres': 'pressure_80m',
+                }, inplace=True)
+    if model == 'hrrr':
         df_temp = ts.to_dataframe()[
             ['si10', 'ws', 'wdir10', 'wdir', 't2m', 'sp']
             ]
