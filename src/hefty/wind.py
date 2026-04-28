@@ -201,7 +201,7 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
                  'sp',  # could be removed
                  'pres']
                 ]
-            # df_temp['t2m'] = df_temp['t2m'] - 273.15
+            df_temp['t2m'] = df_temp['t2m'] - 273.15
             df_temp['t'] = df_temp['t'] - 273.15
             df_temp.rename(columns={
                 'si10': 'wind_speed_10m',
@@ -242,7 +242,7 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
                  'sp',  # could be removed
                  'pres']
                 ]
-            # df_temp['t2m'] = df_temp['t2m'] - 273.15
+            df_temp['t2m'] = df_temp['t2m'] - 273.15
             df_temp['t'] = df_temp['t'] - 273.15
             df_temp.rename(columns={
                 'si10': 'wind_speed_10m',
