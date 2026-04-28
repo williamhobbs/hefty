@@ -24,6 +24,12 @@ def get_fcast_definition(model='gfs'):
 
     Notes
     -----
+    ``delay_intercept`` and ``delay_slope`` values are based on this gist,
+    https://gist.github.com/williamhobbs/9585ff5d1248ab5de4d9e8665d7c8ea6,
+    and https://dynamical.org/status/, along with
+    https://confluence.ecmwf.int/display/DAC/Dissemination+schedule and 
+    https://confluence.ecmwf.int/display/CKB/CAMS%3A+Global+atmospheric+composition+forecast+data+documentation#heading-DataavailabilityHHMM.
+
     The ``'Forecast Schedule Dictionary'`` within ``fcast_definition``
     contains a list of one or more schedule dictionaries. The values in each
     dictionary are lists, where the elements in each list corresond to
@@ -53,10 +59,12 @@ def get_fcast_definition(model='gfs'):
     # ===========================================================
     # Forecast Definitions
     # ===========================================================
+    # IFS
+    # first available 2023-01-18 (https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html#Data-Availability)
     fcast_sched_dict_ifs_1 = {
         'start_date': ['2023-01-18 00:00',
                        '2023-01-18 00:00',
-                       '2023-01-18 06:00'],  # https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html#Data-Availability
+                       '2023-01-18 06:00'],
         'start_hour': [0, 150, 0],
         'end_hour': [144, 240, 90],
         'interval': [3, 6, 3],
@@ -110,6 +118,7 @@ def get_fcast_definition(model='gfs'):
                                          fcast_sched_dict_ifs_3],
     }
 
+    # IFS Ensemble
     # IFS ens does not have ssrd until sometime March 2024. '2024-03-12 12:00'
     # was the first init_date used in https://github.com/williamhobbs/PVSC-2025-daily-energy-forecaster,
     # so start there for now.
@@ -153,8 +162,10 @@ def get_fcast_definition(model='gfs'):
                                          fcast_sched_dict_ifs_ens_2],
     }
 
+    # AIFS
+    # First available 2024-02-01 (https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html)
     fcast_sched_dict_aifs = {
-        'start_date': ['2024-02-01 00:00'],  # https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html
+        'start_date': ['2024-02-01 00:00'],
         'start_hour': [0],
         'end_hour': [360],
         'interval': [6],
@@ -171,10 +182,13 @@ def get_fcast_definition(model='gfs'):
         'Forecast Schedule Dictionary': [fcast_sched_dict_aifs],
     }
 
-    # AIFS ENS schedule is unverified, based on
+    # AIFS ENS
+    # First available 2025-07-2, added one day, as I seem to recall some
+    # variables were missing for a few days (https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html)
+    # Schedule is unverified, based on
     # https://confluence.ecmwf.int/display/DAC/Dissemination+schedule
     fcast_sched_dict_aifs_ens = {
-        'start_date': ['2025-07-03 00:00'],  # https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html
+        'start_date': ['2025-07-03 00:00'],
         'start_hour': [0, 0],
         'end_hour': [360, 96],
         'interval': [6, 6],
@@ -191,6 +205,7 @@ def get_fcast_definition(model='gfs'):
         'Forecast Schedule Dictionary': [fcast_sched_dict_aifs_ens],
     }
 
+    # CAMS version of IFS
     # Runs 00z and 12z, 0-120h by 1h for single-level parameters
     # 00 UTC data available by 10:00 UTC
     # 12 UTC data available by 22:00 UTC
@@ -212,9 +227,11 @@ def get_fcast_definition(model='gfs'):
         'Forecast Schedule Dictionary': [fcast_sched_dict_cams],
     }
 
+    # HRRR (hourly)
+    # HRRR v4 started Dec 3, 2020, https://rapidrefresh.noaa.gov/hrrr/
     fcast_sched_dict_hrrr = {
         'start_date': ['2020-12-03 01:00',
-                       '2020-12-03 00:00'],  # HRRR v4 started Dec 3, 2020, https://rapidrefresh.noaa.gov/hrrr/
+                       '2020-12-03 00:00'],
         'start_hour': [0, 0],
         'end_hour': [18, 48],
         'interval': [1, 1],
@@ -231,9 +248,17 @@ def get_fcast_definition(model='gfs'):
         'Forecast Schedule Dictionary': [fcast_sched_dict_hrrr],
     }
 
+    # GFS
+    # Need to use GFSv15.1 and newer. Previous versions had a bug in solar
+    # zenith angle (pg. 92, https://www.emc.ncep.noaa.gov/emc/docs/FV3GFS_OD_Briefs_10-01-18_4-1-2019.pdf),
+    # and v15 had some other radiation bug, corrected 2018-09-17 18Z (pg. 34, https://www.weather.gov/media/sti/nggps/NGGPS/EMC%20MEG%20Evaluation%20of%20GFSv15_Manikin_SIP%20Meeting_20190514.pdf)
+    # Maybe the same bug? See slide 115 (pg103) https://www.emc.ncep.noaa.gov/emc/docs/FV3GFS_OD_Briefs_10-01-18_4-1-2019.pdf
+    # GFSv15.1 implemented June 12, 2019 (https://doi.org/10.1175/WAF-D-23-0094.1)
+    # see also https://www.emc.ncep.noaa.gov/emc/pages/numerical_forecast_systems/gfs/documentation.php,
+    # https://www.emc.ncep.noaa.gov/emc/pages/numerical_forecast_systems/gfs/implementations.php
     fcast_sched_dict_gfs = {
-        'start_date': ['2020-12-03 01:00',
-                       '2020-12-03 00:00'],  # needs confirmation
+        'start_date': ['2019-06-13 00:00',
+                       '2019-06-13 00:00'],
         'start_hour': [0, 123],
         'end_hour': [120, 384],
         'interval': [1, 3],
@@ -246,13 +271,18 @@ def get_fcast_definition(model='gfs'):
 
     fcast_definition_gfs = {
         'Name': 'gfs',
-        'Start Date of Schedule': ['2020-12-03 00:00'],  # needs confirmation
+        'Start Date of Schedule': ['2019-06-13 00:00'],
         'Forecast Schedule Dictionary': [fcast_sched_dict_gfs],
     }
 
+    # GEFS
+    # Need to use GEFSv12 and newer to correspond to GFSv15.1 and newer (see
+    # comments on GFS above).
+    # GEFSv12 is based on GFSv15.1 (https://journals.ametsoc.org/view/journals/mwre/150/3/MWR-D-21-0245.1.xml)
+    # Implemented 2020-09-23 (https://www.emc.ncep.noaa.gov/emc/pages/numerical_forecast_systems/gefs.php)
     fcast_sched_dict_gefs = {
-        'start_date': ['2020-12-03 01:00',
-                       '2020-12-03 00:00'],  # needs confirmation
+        'start_date': ['2020-09-24 01:00',
+                       '2020-09-24 00:00'],
         'start_hour': [0, 390],
         'end_hour': [384, 840],
         'interval': [3, 6],
@@ -265,7 +295,7 @@ def get_fcast_definition(model='gfs'):
 
     fcast_definition_gefs = {
         'Name': 'gefs',
-        'Start Date of Schedule': ['2020-12-03 00:00'],  # needs confirmation
+        'Start Date of Schedule': ['2020-09-24 01:00'],
         'Forecast Schedule Dictionary': [fcast_sched_dict_gefs],
     }
 
@@ -580,6 +610,26 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         # maximum forecast horizon, update with new lead time
         fxx_max = run_length + lead_time_to_start
 
+        # Herbie inputs
+        product = 'pgrb2.0p25'
+        if resource_type == 'solar':
+            search_str = 'DSWRF|:TMP:2 m above|[UV]GRD:10 m above'
+            # solar radiation is not available for f00 (lead_time_to_start=0)
+            # adjust accordingly
+            if lead_time_to_start < 1:
+                lead_time_to_start = 1
+                warnings.warn(
+                        ("You have specified a lead_time_to_start less "
+                         "than 1 h. GHI in GFS is only available "
+                         "starting at F01. The lead_time_to_start has been "
+                         "changed to 1 h."))
+        elif resource_type == 'wind':
+            search_str = (
+                '[UV]GRD:10 m above|[UV]GRD:80 m above|'
+                '[UV]GRD:100 m above|:TMP:2 m above|PRES:surface|'
+                ':TMP:80 m above|PRES:80 m above'
+            )
+
         # set forecast lead times
         if lead_time_to_start <= 120 and fxx_max > 120:
             fxx_max = round(fxx_max/3)*3
@@ -591,17 +641,6 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
             fxx_range = range(lead_time_to_start, fxx_max + 1, 3)
         else:
             fxx_range = range(lead_time_to_start, fxx_max + 1, 1)
-
-        # Herbie inputs
-        product = 'pgrb2.0p25'
-        if resource_type == 'solar':
-            search_str = 'DSWRF|:TMP:2 m above|[UV]GRD:10 m above'
-        elif resource_type == 'wind':
-            search_str = (
-                '[UV]GRD:10 m above|[UV]GRD:80 m above|'
-                '[UV]GRD:100 m above|:TMP:2 m above|PRES:surface|'
-                ':TMP:80 m above|PRES:80 m above'
-            )
 
     elif model == 'gefs':
         # GEFS:
