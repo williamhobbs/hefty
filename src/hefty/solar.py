@@ -1487,6 +1487,31 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                     priority=priority)
                     FH.download(search_str)
                     ds = FH.xarray(search_str, remove_grib=False)
+                    # check for missing members. if any, raise error
+                    # fixes GH #28
+                    # see https://github.com/williamhobbs/hefty/issues/28 for
+                    # details
+                    for data_var in ds.data_vars:
+                        # count of valid values in each step/number
+                        # combination (slicing along lat/lon plane)
+                        c_v = (
+                            ds.count(dim=['latitude', 'longitude'])[data_var].
+                            values)
+                        num_missing_members = (np.count_nonzero(c_v == 0))
+                        if num_missing_members > 0:
+                            # indices of steps w/ missing members
+                            steps_idx = (
+                                [i for i, sublist in enumerate(c_v) if 0 in
+                                 sublist])
+                            # fxx values
+                            fxx_vals = ((ds['step'].values[steps_idx] /
+                                        np.timedelta64(1, 'h')).
+                                        astype(int).tolist())
+                            msg = (f'{num_missing_members} members appear to '
+                                   f'be missing for init_date {init_date}, fxx'
+                                   f' values {fxx_vals}')
+                            print(msg)
+                            raise ValueError(msg)
                 else:
                     # after first attempt, set overwrite=True to overwrite
                     # partial files
@@ -1498,6 +1523,28 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                     priority=priority)
                     FH.download(search_str, overwrite=True)
                     ds = FH.xarray(search_str, remove_grib=False)
+                    # check for missing members again
+                    for data_var in ds.data_vars:
+                        # count of valid values in each step/number
+                        # combination (slicing along lat/lon plane)
+                        c_v = (
+                            ds.count(dim=['latitude', 'longitude'])[data_var].
+                            values)
+                        num_missing_members = (np.count_nonzero(c_v == 0))
+                        if num_missing_members > 0:
+                            # indices of steps w/ missing members
+                            steps_idx = (
+                                [i for i, sublist in enumerate(c_v) if 0 in
+                                 sublist])
+                            # fxx values
+                            fxx_vals = ((ds['step'].values[steps_idx] /
+                                        np.timedelta64(1, 'h')).
+                                        astype(int).tolist())
+                            msg = (f'{num_missing_members} members appear to '
+                                   f'be missing for init_date {init_date}, fxx'
+                                   f' values {fxx_vals}')
+                            print(msg)
+                            raise ValueError(msg)
             except Exception as e:
                 print(e)
                 if attempts_remaining:
