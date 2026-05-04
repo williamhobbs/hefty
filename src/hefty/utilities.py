@@ -131,7 +131,7 @@ def get_fcast_definition(model='gfs'):
                        '2024-03-10 12:00',
                        '2024-03-10 18:00'],  # https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html#Data-Availability
         'start_hour': [0, 150, 0],
-        'end_hour': [144, 240, 144],
+        'end_hour': [144, 360, 144],
         'interval': [3, 6, 3],
         'first_cycle': [0, 0, 6],
         'update_period': [12, 12, 12],
