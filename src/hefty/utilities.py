@@ -82,7 +82,7 @@ def get_fcast_definition(model='gfs'):
                        '2024-11-12 12:00',
                        '2024-11-12 06:00'],
         'start_hour': [0, 150, 0],
-        'end_hour': [144, 360, 90],
+        'end_hour': [144, 360, 144],
         'interval': [3, 6, 3],
         'first_cycle': [0, 0, 6],
         'update_period': [12, 12, 12],
@@ -122,13 +122,16 @@ def get_fcast_definition(model='gfs'):
     # IFS ens does not have ssrd until sometime March 2024. '2024-03-12 12:00'
     # was the first init_date used in https://github.com/williamhobbs/PVSC-2025-daily-energy-forecaster,
     # so start there for now.
-    # delays based on https://dynamical.org/status/ as of 2026-04-24
+    # delays based on https://dynamical.org/status/ as of 2026-04-24.
+    # From https://www.ecmwf.int/en/forecasts/datasets/open-data,
+    # For times 00z &12z: 0 to 144 by 3, 150 to 360 by 6.
+    # For times 06z & 18z: 0 to 144 by 3.
     fcast_sched_dict_ifs_ens_1 = {
         'start_date': ['2024-03-10 12:00',
                        '2024-03-10 12:00',
                        '2024-03-10 18:00'],  # https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html#Data-Availability
         'start_hour': [0, 150, 0],
-        'end_hour': [144, 240, 90],
+        'end_hour': [144, 240, 144],
         'interval': [3, 6, 3],
         'first_cycle': [0, 0, 6],
         'update_period': [12, 12, 12],
