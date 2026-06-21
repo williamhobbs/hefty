@@ -151,6 +151,16 @@ with this output (note that pressure is on the secondary y-axis):
 
 <img src="images/output_wind.png" width="500"/>
 
+## Examples
+
+The `examples/` folder contains Jupyter notebooks demonstrating how to use hefty:
+
+- **[solar_example.ipynb](examples/solar_example.ipynb)** — Basic solar power forecast using NOAA HRRR, NOAA GFS, and ECMWF IFS. Includes converting resource forecasts to power output. Good starting point.
+- **[more_solar_examples.ipynb](examples/more_solar_examples.ipynb)** — Builds on `solar_example.ipynb`. Covers forecasting multiple sites at once and running forecasts across multiple initialization times.
+- **[ensemble_example.ipynb](examples/ensemble_example.ipynb)** — Demonstrates solar ensemble forecasts using `get_solar_forecast_ensemble_subset` and `get_solar_forecast_ensemble`.
+- **[wind_example.ipynb](examples/wind_example.ipynb)** — Basic wind resource forecast using NOAA GFS, NOAA GEFS, and ECMWF AIFS.
+- **[cams_example.ipynb](examples/cams_example.ipynb)** — Solar forecast using ECMWF CAMS, which provides hourly intervals and clear-sky irradiance. Requires a separate `cdsapi` install and CDS API key.
+
 ## Installation
 
 A virtual environment is strongly recommended. You can install from PyPi with:
@@ -170,6 +180,58 @@ If you want to use ECMWF CAMS, you also need `cdsapi`:
 ```
 pip install cdsapi
 ```
+
+### Disk space and data directory
+
+Herbie downloads and caches GRIB weather data files to a local `~/data/` directory by default. These files can be large (tens to hundreds of MB per file depending on the model). You can change the default save location by configuring Herbie — see the [Herbie configuration guide](https://herbie.readthedocs.io/en/stable/user_guide/configure.html) for details.
+
+## Troubleshooting
+
+### Firewall or SSL certificate errors
+
+If you get SSL errors or certificate verification failures when downloading forecast data, two options that have helped users:
+
+- `pip install pip_system_certs` — makes pip use your system's certificate store
+- `pip install certifi` — provides an updated certificate bundle
+
+### Intermittent SSL errors with IFS via Google
+
+Errors like:
+
+```
+HTTPSConnectionPool(host='storage.googleapis.com', port=443): Max retries exceeded ...
+SSLError(SSLEOFError(8, '[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol'))
+```
+
+can be fixed by upgrading urllib3:
+
+```
+pip install --upgrade urllib3
+```
+
+### Corrupt or partial GRIB files
+
+Errors like:
+
+```
+TypeError: objects must be an iterable containing only DataTree(s), Dataset(s), DataArray(s), and dictionaries: ['t2m']
+```
+
+are usually caused by partial or corrupt GRIB files from a previous failed download. Fix by navigating to the Herbie data directory (e.g., `~/data/ifs/20240605/` or `C:\Users\[username]\data\ifs\20240605\`) and deleting the contents, then re-running.
+
+### eccodes not found
+
+If you get errors related to `eccodes` (required by cfgrib, which Herbie uses to read GRIB files), install it via conda:
+
+```
+conda install -c conda-forge eccodes
+```
+
+This is especially common on Windows and is not always resolved by pip alone.
+
+### Python version
+
+hefty requires Python 3.11 or newer. If you get unexpected errors on install or import, check your Python version with `python --version`.
 
 ## References
 This project uses several Python packages, including pvlib, an open-source solar PV modeling package [1, 2], and Herbie [3, 4], a package for accessing weather forecast data from NOAA. `pv_model.py` (with the `model_pv_power()` function used here) comes from [5] which leverages some functions from [6].
