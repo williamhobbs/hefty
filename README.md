@@ -219,15 +219,7 @@ TypeError: objects must be an iterable containing only DataTree(s), Dataset(s), 
 
 are usually caused by partial or corrupt GRIB files from a previous failed download. Fix by navigating to the Herbie data directory (e.g., `~/data/ifs/20240605/` or `C:\Users\[username]\data\ifs\20240605\`) and deleting the contents, then re-running.
 
-### eccodes not found
 
-If you get errors related to `eccodes` (required by cfgrib, which Herbie uses to read GRIB files), install it via conda:
-
-```
-conda install -c conda-forge eccodes
-```
-
-This is especially common on Windows and is not always resolved by pip alone.
 
 ### Python version
 
