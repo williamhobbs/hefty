@@ -11,6 +11,34 @@ For wind, look at the notebook [wind_example.ipynb](examples/wind_example.ipynb)
 
 The [custom.py](src/hefty/custom.py) module is intended to help with getting forecasts of "custom" weather parameters, not necessarily specific to wind or solar, which migh be useful for load forecasting.
 
+## Supported forecast models
+
+The solar, wind, and datetime helper functions use these model names in the
+`model` argument. The forecast span is the forecast-hour range available from
+compatible model cycles. In general, `run_length + lead_time_to_start` must
+fit inside the listed span for the selected cycle. Use
+`adjust_forecast_datetimes()` to select an initialization time and lead-time
+combination that satisfies cycle-specific limits. Note that these forecast model schedules/features can change over time, and the `get_fcast_definition` function in `hefty.utilities` is intended to record these changes.
+
+| Model | Forecast type | Function support | Cycles | Available forecast span | Forecast-hour steps |
+| --- | --- | --- | --- | --- | --- |
+| `hrrr` | NOAA HRRR deterministic NWP | Solar, wind | Hourly; `00z`, `06z`, `12z`, and `18z` have extended range | `0`-`18` h; extended cycles: `0`-`48` h | 1 h |
+| `gfs` | NOAA GFS deterministic NWP | Solar, wind | `00z`, `06z`, `12z`, `18z` | `0`-`120` h, then `123`-`384` h | 1 h through `120` h, then 3 h |
+| `gefs` | NOAA GEFS ensemble NWP | Solar, wind, solar ensemble | `00z`, `06z`, `12z`, `18z` | `0`-`384` h. Solar uses 0.25 degree data through `240` h when available and 0.5 degree data beyond that. | 3 h |
+| `ifs` | ECMWF IFS deterministic NWP | Solar, wind | `00z`, `06z`, `12z`, `18z`; `00z` and `12z` have extended range | `0`-`144` h; extended cycles: `150`-`360` h | 3 h through `144` h, then 6 h |
+| `aifs` | ECMWF AIFS deterministic MLWP | Solar, wind | `00z`, `06z`, `12z`, `18z` | `0`-`360` h | 6 h |
+| `cams` | ECMWF CAMS IFS composition forecast | Solar only via `get_solar_forecast` | `00z`, `12z` | `0`-`120` h. Requires `cdsapi` and a CDS API key. | 1 h |
+| `ifs_ens` | ECMWF IFS ensemble NWP | Solar ensemble | `00z`, `06z`, `12z`, `18z`; `00z` and `12z` have extended range | `0`-`144` h; extended cycles: `150`-`360` h | 3 h through `144` h, then 6 h |
+| `aifs_ens` | ECMWF AIFS ensemble MLWP | Solar ensemble | `00z`, `06z`, `12z`, `18z`; `00z` and `12z` have extended range | `00z` and `12z`: `0`-`360` h; `06z` and `18z`: `0`-`96` h | 6 h |
+
+For ensemble forecasts, `get_solar_forecast_ensemble()` supports `ifs_ens`,
+`aifs_ens`, and `gefs`. `get_solar_forecast_ensemble_subset()` currently
+supports `ifs_ens` only.
+
+Custom forecasts use the `period`, `product`, and `search_str` arguments
+passed to `get_custom_forecast()`, rather than the model-specific
+forecast-hour formatter used by the solar and wind tools.
+
 ### Handling dates and times
 
 Handling dates and times can get a bit complicated when it comes to forecasts. hefty tries to match conventions used in the Solar Forecast Arbiter (https://forecastarbiter.epri.com/definitions/), such as "_lead time to start_" and "_run length_". However, the Arbiter uses the term "_issue time_" to represent the time that a forecast is issued/delivered, but that time is not necessarily directly relevant to NWP/MLWP outputs.
