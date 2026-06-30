@@ -151,6 +151,33 @@ with this output (note that pressure is on the secondary y-axis):
 
 <img src="images/output_wind.png" width="500"/>
 
+## Troubleshooting
+
+GRIB files can occasionally download with missing/incomplete artifacts. If forecasts
+contain unexpected missing/incomplete values, try deleting cached GRIB files from your
+Herbie cache. See the Herbie cache configuration docs:
+https://herbie.readthedocs.io/en/stable/user_guide/configure.html.
+
+If deleting the cache does not resolve the issue, try downloading the same
+forecast from a different Herbie source, such as Azure, Google, or AWS.
+
+## Attribution
+### ECMWF
+If you use models from ECMWF, you may need to include attribution language with the results. 
+
+For IFS and AIFS open data (`model='ifs'` or `model='aifs'`), please see the [ECMWF license terms](https://apps.ecmwf.int/datasets/licences/general/). For the CAMS version of IFS (`model='cams'`), please see the *References* and *License* sections of the [CAMS global atmospheric composition forecasts](https://ads.atmosphere.copernicus.eu/datasets/cams-global-atmospheric-composition-forecasts?tab=overview) page. 
+
+A possible example attribution for IFS and AIFS:
+
+> This document/data/output/Results is/are based on data and products of the European Centre for Medium-Range Weather Forecasts (ECMWF). © 2026 European Centre for Medium-Range Weather Forecasts (ECMWF), www.ecmwf.int. This data is published under a Creative Commons Attribution 4.0 International (CC BY 4.0). https://creativecommons.org/licenses/by/4.0/.  ECMWF does not accept any liability whatsoever for any error or omission in the data, their availability, or for any loss or damage arising from their use.
+>
+>ECMWF Data have been modified using the functions included in the hefty Python package (e.g., interpolation to hourly values).
+
+A possible example attribution and citation for the CAMS version of IFS:
+
+> Contains modified Copernicus Atmosphere Monitoring Service information [2026]. Neither the European Commission nor ECMWF is responsible for any use that may be made of the Copernicus information or data it contains.  © 2026 European Centre for Medium-Range Weather Forecasts (ECMWF), www.ecmwf.int. This data is published under a Creative Commons Attribution 4.0 International (CC BY 4.0). https://creativecommons.org/licenses/by/4.0/.
+>
+> Copernicus Atmosphere Monitoring Service (2021): CAMS global atmospheric composition forecasts. Copernicus Atmosphere Monitoring Service (CAMS) Atmosphere Data Store, DOI: 10.24381/04a0b097 (Accessed on DD-MMM-YYYY).
 ## Installation
 
 A virtual environment is strongly recommended. You can install from PyPi with:
@@ -187,4 +214,4 @@ This project uses several Python packages, including pvlib, an open-source solar
 
 [5] https://github.com/williamhobbs/pv-system-model
 
-[6] Hobbs, W., Anderson, K., Mikofski, M., and Ghiz, M. "An approach to modeling linear and non-linear self-shading losses with pvlib." 2024 PV Performance Modeling Collaborative (PVPMC). https://github.com/williamhobbs/2024_pvpmc_self_shade 
+[6] Hobbs, W., Anderson, K., Mikofski, M., and Ghiz, M. "An approach to modeling linear and non-linear self-shading losses with pvlib." 2024 PV Performance Modeling Collaborative (PVPMC). https://github.com/williamhobbs/2024_pvpmc_self_shade
