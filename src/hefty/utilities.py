@@ -193,7 +193,7 @@ def get_fcast_definition(model='gfs'):
     fcast_sched_dict_aifs_ens = {
         'start_date': ['2025-07-03 00:00'],
         'start_hour': [0, 0],
-        'end_hour': [360, 96],
+        'end_hour': [360, 144],
         'interval': [6, 6],
         'first_cycle': [0, 6],
         'update_period': [12, 12],

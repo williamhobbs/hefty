@@ -29,7 +29,7 @@ combination that satisfies cycle-specific limits. Note that these forecast model
 | `aifs` | ECMWF AIFS deterministic MLWP | Solar, wind | `00z`, `06z`, `12z`, `18z` | `0`-`360` h | 6 h |
 | `cams` | ECMWF CAMS IFS composition forecast | Solar only via `get_solar_forecast` | `00z`, `12z` | `0`-`120` h. Requires `cdsapi` and a CDS API key. | 1 h |
 | `ifs_ens` | ECMWF IFS ensemble NWP | Solar ensemble | `00z`, `06z`, `12z`, `18z`; `00z` and `12z` have extended range | `0`-`144` h; extended cycles: `150`-`360` h | 3 h through `144` h, then 6 h |
-| `aifs_ens` | ECMWF AIFS ensemble MLWP | Solar ensemble | `00z`, `06z`, `12z`, `18z`; `00z` and `12z` have extended range | `00z` and `12z`: `0`-`360` h; `06z` and `18z`: `0`-`96` h | 6 h |
+| `aifs_ens` | ECMWF AIFS ensemble MLWP | Solar ensemble | `00z`, `06z`, `12z`, `18z`; `00z` and `12z` have extended range | `00z` and `12z`: `0`-`360` h; `06z` and `18z`: `0`-`144` h | 6 h |
 
 For ensemble forecasts, `get_solar_forecast_ensemble()` supports `ifs_ens`,
 `aifs_ens`, and `gefs`. `get_solar_forecast_ensemble_subset()` currently
