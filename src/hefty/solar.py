@@ -280,7 +280,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 'leadtime_hour': [str(i) for i in fxx_range],
                 'type': ['forecast'],
                 'data_format': 'grib',
-                'area': cams_area  # [N, W, S, E]
+                'area': cams_area,  # [N, W, S, E]
+                'nocache': str(round(time.time())),
             }
             URL = 'https://ads.atmosphere.copernicus.eu/api'
             client = cdsapi.Client(url=URL, key=cams_api_key)
