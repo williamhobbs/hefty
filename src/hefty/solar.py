@@ -1829,6 +1829,16 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                         priority=priority)
                         FH.download(search_str)
                         ds = FH.xarray(search_str, remove_grib=False)
+                        # check for missing grib files. if any, raise error
+                        # fixes GH #36
+                        # see https://github.com/williamhobbs/hefty/issues/36
+                        # for details
+                        if len(ds.step) < len(fxx_range):
+                            msg = (f'{len(ds.step)} fxx steps appear to be '
+                                   f'missing for member {x}. Another download'
+                                   f' will be attempted if there are attempts'
+                                   f' remaining.')
+                            raise ValueError(msg)
                     else:
                         # after first attempt, set overwrite=True to overwrite
                         # partial files
@@ -1840,6 +1850,16 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                         priority=priority)
                         FH.download(search_str, overwrite=True)
                         ds = FH.xarray(search_str, remove_grib=False)
+                        # check for missing grib files. if any, raise error
+                        # fixes GH #36
+                        # see https://github.com/williamhobbs/hefty/issues/36
+                        # for details
+                        if len(ds.step) < len(fxx_range):
+                            msg = (f'{len(ds.step)} fxx steps appear to be '
+                                   f'missing for member {x}. Another download'
+                                   f' will be attempted if there are attempts'
+                                   f' remaining.')
+                            raise ValueError(msg)
                 except Exception as e:
                     print(e)
                     if attempts_remaining:
