@@ -162,6 +162,9 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                             member=member,
                             priority=priority
                             ).xarray(search_str)
+                        # merge - override avoids height conflict between 2m
+                        # temp and 10m wind
+                        ds = xr.merge(ds, compat='override')
                     else:
                         # after first attempt, set overwrite=True to overwrite
                         # partial files
@@ -173,6 +176,9 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                             member=member,
                             priority=priority
                             ).xarray(search_str, overwrite=True)
+                        # merge - override avoids height conflict between 2m
+                        # temp and 10m wind
+                        ds = xr.merge(ds, compat='override')
                 except Exception as e:
                     print(e)
                     if attempts_remaining:
@@ -186,9 +192,6 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 else:
                     break
 
-            # merge - override avoids hight conflict between 2m temp and 10m
-            # wind
-            ds = xr.merge(ds, compat='override')
             # calculate wind speed from u and v components
             ds = ds.herbie.with_wind('speed')
 
@@ -727,6 +730,9 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                     FH.download(search_string_list[j])
                     ds_dict[j] = FH.xarray(search_string_list[j],
                                            remove_grib=True)
+                    # merge - override avoids height conflict between 2m temp
+                    # and 10m wind
+                    ds = xr.merge(ds_dict.values(), compat='override')
                 else:
                     # after first attempt, set overwrite=True to overwrite
                     # partial files
@@ -734,6 +740,9 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                     ds_dict[j] = FH.xarray(search_string_list[j],
                                            remove_grib=True,
                                            overwrite=True)
+                    # merge - override avoids height conflict between 2m temp
+                    # and 10m wind
+                    ds = xr.merge(ds_dict.values(), compat='override')
             except Exception as e:
                 print(e)
                 if attempts_remaining:
@@ -746,8 +755,6 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             else:
                 break
 
-        # merge - override avoids hight conflict between 2m temp and 10m wind
-        ds = xr.merge(ds_dict.values(), compat='override')
         # calculate wind speed from u and v components
         ds = ds.herbie.with_wind('speed')
 
