@@ -1,9 +1,9 @@
 # hEFTy
 Some (relatively) lightweight short-term **e**nergy **f**orecasting **t**ools for solar, wind, and load.
 
-This repository currently includes solar and wind tools, but may expand one day to include electric load. Forecasts can be created using the NOAA GFS, NOAA GEFS, NOAA HRRR, and ECMWF IFS and AIFS (open data versions) Numerical Weather Prediction (NWP) and Machine Learning Weather Prediction (MLWP) models. The ECMWF CAMS version of IFS is also included, but only via `hefty.solar.get_solar_forecast()`, and it requires `cdsapi` to be installed and the user needs an API key (see https://ads.atmosphere.copernicus.eu/how-to-api).
+This repository currently includes solar and wind tools, but may expand one day to include electric load. Forecasts can be created using the NOAA GFS, NOAA GEFS, NOAA HRRR, and ECMWF IFS and AIFS (open data versions) Numerical Weather Prediction (NWP) and Machine Learning Weather Prediction (MLWP) models. The ECMWF CAMS version of IFS (a.k.a. "IFS-COMPO") is also included, but only via `hefty.solar.get_solar_forecast()`, and it requires `cdsapi` to be installed and the user needs an API key (see https://ads.atmosphere.copernicus.eu/how-to-api).
 
-For solar, look at the notebook [solar_example.ipynb](examples/solar_example.ipynb) for some examples, and [more_solar_examples.ipynb](examples/more_solar_examples.ipynb) for more examples. Both of these convert the resource forecasts to power.
+For solar, look at the notebook [solar_example.ipynb](examples/solar_example.ipynb) for some examples, and [more_solar_examples.ipynb](examples/more_solar_examples.ipynb) for more examples. Both of these convert the resource forecasts to power. See [cams_example.ipynb](examples/cams_example.ipynb) for a CAMS IFS example and more details on that model.
 
 There are also solar ensemble forecasts demonstrated in [ensemble_example.ipynb](examples/ensemble_example.ipynb).
 

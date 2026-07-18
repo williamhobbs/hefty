@@ -997,7 +997,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
 
 def get_solar_forecast_ensemble_subset(
         latitude, longitude, init_date, run_length, lead_time_to_start=0,
-        model='ifs', attempts=2, num_members=3, priority=None):
+        model='ifs_ens', attempts=2, num_members=3, priority=None):
     """
     Get solar resource forecasts for one or several sites using a subset of
     ensemble members. Use `get_solar_forecast_ensemble` for all ensemble
@@ -1032,8 +1032,8 @@ def get_solar_forecast_ensemble_subset(
         the first forecasted interval.
 
     model : string, default 'ifs_ens'
-        Forecast model. Default and only option is ECMWF IFS ('ifs'). NOAA
-        GEFS may be added in the future.
+        Forecast model. Default and only option is ECMWF IFS Ensemble
+        ('ifs_ens'). NOAA GEFS may be added in the future.
 
     attempts : int, optional
         Number of times to try getting forecast data. The function will pause
@@ -1367,17 +1367,22 @@ def get_solar_forecast_ensemble_subset(
 
 def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                 lead_time_to_start=0, model='ifs_ens',
-                                attempts=2, priority=None):
+                                attempts=2, priority=None,
+                                get_ens_temp=False, get_ens_wind=False):
     """
     Get solar resource forecasts for one or several sites using all ensemble
     members. Using `get_solar_forecast_ensemble_subset` may be fast for a
     small subset of ensemble members, e.g., much less that 25% of members.
     This function uses Herbie's FastHerbie [1]_ and pvlib [2]_. It currently
     only works with a single init_date, not a list of dates like FastHerbie
-    can use. Temperature data comes from the ensemble mean for GEFS, the
-    control member for IFS (mean is available and could be used), and the
-    first member for AIFS (mean and control do not seem to be available). Wind
-    speed is currently just a filler value of 2 m/s to save time.
+    can use. If input `get_ens_temp` is False (default), then temperature
+    data comes from the ensemble mean for GEFS, the control member for IFS
+    (mean is available and could be used in the future), and the first member
+    for AIFS (mean and control do not seem to be available). If
+    `get_ens_temp` is True, temperatures come from each ensemble member. If
+    `get_ens_wind` is False (default), wind speed is just a filler value of 2
+    m/s to save time. If `get_ens_wind` is True, temperatures come from each
+    ensemble member.
 
     Parameters
     ----------
@@ -1417,6 +1422,17 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
         priority, or string for a single source. See Herbie docs.
         Typical values would be 'aws' or 'google'.
 
+    get_ens_temp : bool, default False
+        Get air temperature from each ensemble member if `True`. Otherwise,
+        if `False` (default), get air temperature from the control member and
+        use it for all forecasts. Setting to `True` approximately doubles the
+        amount of data and the time needed to download and process it. Must
+        be `True` if `get_ens_wind` is `True`.
+
+    get_ens_wind : bool, default False
+        Get wind speed from each ensemble member if `True`. Otherwise, if
+        `False` (default), wind speed is a generic 2 m/s value to save time.
+
     Returns
     -------
     data : pandas.DataFrane
@@ -1448,7 +1464,10 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
     ):
         raise ValueError(('model must be ifs_ens, aifs_ens, or gefs, you '
                           'entered ' + model))
-
+    # check get_ens_temp/wind
+    if get_ens_wind and not get_ens_temp:
+        raise ValueError('if get_ens_wind=True, get_ens_temp must also be '
+                         'True')
     # model_herbie is the model name Herbie uses
     if model == 'ifs_ens':
         model_herbie = 'ifs'
@@ -1486,6 +1505,18 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
         # regex based on https://superuser.com/a/1335688
         search_str = '^(?=.*:ssrd:sfc:)(?:(?!:ssrd:sfc:g).)*$'
 
+        if get_ens_temp and not get_ens_wind:
+            search_str = (
+                '^(?=.*:ssrd:sfc:)(?:(?!:ssrd:sfc:g).)*$'
+                '|^(?=.*:2t:sfc:)(?:(?!:2t:sfc:g).)*$'
+            )
+        if get_ens_temp and get_ens_wind:
+            search_str = (
+                '^(?=.*:ssrd:sfc:)(?:(?!:ssrd:sfc:g).)*$'
+                '|^(?=.*:2t:sfc:)(?:(?!:2t:sfc:g).)*$'
+                '|^(?=.*:10[uv]:)(?:(?!:10[uv]:sfc:g).)*$'
+            )
+
         # try n times based loosely on
         # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
         for attempts_remaining in reversed(range(attempts)):
@@ -1500,6 +1531,9 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                     priority=priority)
                     FH.download(search_str)
                     ds = FH.xarray(search_str, remove_grib=False)
+                    if get_ens_temp:
+                        # merge - override avoids height conflicts
+                        ds = xr.merge(ds, compat='override')
                     # check for missing members. if any, raise error
                     # fixes GH #28
                     # see https://github.com/williamhobbs/hefty/issues/28 for
@@ -1536,6 +1570,9 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                     priority=priority)
                     FH.download(search_str, overwrite=True)
                     ds = FH.xarray(search_str, remove_grib=False)
+                    if get_ens_temp:
+                        # merge - override avoids height conflicts
+                        ds = xr.merge(ds, compat='override')
                     # check for missing members again
                     for data_var in ds.data_vars:
                         # count of valid values in each step/number
@@ -1569,20 +1606,33 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                      f'with error: {e}')
             else:
                 break
-
+        if get_ens_wind:
+            ds = ds.herbie.with_wind('speed')
         # use pick_points for single point or list of points
         ds2 = ds.herbie.pick_points(pd.DataFrame({
                         "latitude": latitude,
                         "longitude": longitude,
                         }))
+
+        if get_ens_temp and not get_ens_wind:
+            cols = ['number', 'point', 'ssrd', 'time', 't2m']
+        elif get_ens_temp and get_ens_wind:
+            cols = ['number', 'point', 'ssrd', 'time', 't2m', 'si10']
+        else:
+            cols = ['number', 'point', 'ssrd', 'time']
         # convert to dataframe
         df_temp = (ds2
                    .to_dataframe()
                    .reset_index()
-                   .set_index('valid_time')[['number', 'point', 'ssrd',
-                                             'time']])
+                   .set_index('valid_time')[cols])
         # add timezone
         df_temp = df_temp.tz_localize('UTC', level='valid_time')
+        if get_ens_temp:
+            # convert air temperature units
+            df_temp['temp_air'] = df_temp['t2m'] - 273.15
+        if get_ens_wind:
+            # rename wind speed
+            df_temp = df_temp.rename(columns={'si10': 'wind_speed'})
         # rename ssrd, init_time
         df_temp = df_temp.rename(columns={'ssrd': 'sdswrf',
                                           'time': 'init_time'})
@@ -1631,17 +1681,31 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # avoid divide by zero issues
                 df.loc[df['ghi'] == 0, 'ghi_csi'] = 0
 
-                # make a dummy column
-                df['dummy'] = 0
-
                 # 60min version of data, centered at bottom of the hour
                 # 1min interpolation, then 60min mean
-                df_60min = (
-                    df['dummy']
-                    .resample('1min')
-                    .interpolate()
-                    .resample('60min').mean()
-                )
+                if get_ens_temp and not get_ens_wind:
+                    df_60min = (
+                        df[['temp_air']]
+                        .resample('1min')
+                        .interpolate()
+                        .resample('60min').mean()
+                    )
+                elif get_ens_temp and get_ens_wind:
+                    df_60min = (
+                        df[['temp_air', 'wind_speed']]
+                        .resample('1min')
+                        .interpolate()
+                        .resample('60min').mean()
+                    )
+                else:
+                    # make a dummy column
+                    df['dummy'] = 0
+                    df_60min = (
+                        df['dummy']
+                        .resample('1min')
+                        .interpolate()
+                        .resample('60min').mean()
+                    )
                 # make timestamps center-labeled for instantaneous pvlib
                 # modeling later
                 df_60min.index = df_60min.index + pd.Timedelta('30min')
@@ -1688,133 +1752,144 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # add member number and point, drop dummy column
                 df_60min['member'] = number
                 df_60min['point'] = point
-                df_60min = df_60min.drop(columns=['dummy'])
+                if not get_ens_temp:
+                    df_60min = df_60min.drop(columns=['dummy'])
 
                 # append
                 dfs.append(df_60min)
 
         # convert to dataframe
         df_60min_irr = pd.concat(dfs)
+        df_60min = df_60min_irr.copy()
 
-        if model == 'ifs_ens':
-            # get deterministic temp_air using ifs control member
-            search_str = ':2t:sfc:g:0001:od:cf:enfo'
-            get_control = None
-            product = 'enfo'
-            # account for IFS changes starting 2026-05-12 06z
-            if (init_date.tz_localize(None) > pd.to_datetime('2026-05-12')):
-                product = 'oper'
-                search_str = '2t:sfc'
-        elif model == 'aifs_ens':
-            search_str = ':2t:sfc:'
-            # Herbie kwarg to get control member, https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html#AIFS-Ensembles
-            get_control = True
-            product = 'enfo'
+        if not get_ens_temp:
+            if model == 'ifs_ens':
+                # get deterministic temp_air using ifs control member
+                search_str = ':2t:sfc:g:0001:od:cf:enfo'
+                get_control = None
+                product = 'enfo'
+                # account for IFS changes starting 2026-05-12 06z
+                newer = (init_date.tz_localize(None) >
+                         pd.to_datetime('2026-05-12'))
+                if newer:
+                    product = 'oper'
+                    search_str = '2t:sfc'
+            elif model == 'aifs_ens':
+                search_str = ':2t:sfc:'
+                # Herbie kwarg to get control member,
+                # https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html#AIFS-Ensembles
+                get_control = True
+                product = 'enfo'
 
-        # try n times based loosely on
-        # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
-        for attempts_remaining in reversed(range(attempts)):
-            attempt_num = attempts - attempts_remaining
-            try:
-                if attempt_num == 1:
-                    # try downloading
-                    FH = FastHerbie(DATES=[init_date],
-                                    model=model_herbie,
-                                    product=product,
-                                    fxx=fxx_range,
-                                    priority=priority,
-                                    get_control=get_control,
-                                    )
-                    FH.download(search_str)
-                    ds = FH.xarray(search_str, remove_grib=False)
+            # try n times based loosely on
+            # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
+            for attempts_remaining in reversed(range(attempts)):
+                attempt_num = attempts - attempts_remaining
+                try:
+                    if attempt_num == 1:
+                        # try downloading
+                        FH = FastHerbie(DATES=[init_date],
+                                        model=model_herbie,
+                                        product=product,
+                                        fxx=fxx_range,
+                                        priority=priority,
+                                        get_control=get_control,
+                                        )
+                        FH.download(search_str)
+                        ds = FH.xarray(search_str, remove_grib=False)
+                    else:
+                        # after first attempt, set overwrite=True to overwrite
+                        # partial files
+                        FH = FastHerbie(DATES=[init_date],
+                                        model=model_herbie,
+                                        product=product,
+                                        fxx=fxx_range,
+                                        priority=priority,
+                                        get_control=get_control,
+                                        )
+                        FH.download(search_str, overwrite=True)
+                        ds = FH.xarray(search_str, remove_grib=False)
+                except Exception as e:
+                    print(e)
+                    if attempts_remaining:
+                        print(f'attempt {str(attempt_num)} failed, pause'
+                              f' for {str((attempt_num)**2)} min')
+                        time.sleep(60*(attempt_num)**2)
+                    else:
+                        raise ValueError(f'download failed, ran out of '
+                                         f'attempts with error: {e}')
                 else:
-                    # after first attempt, set overwrite=True to overwrite
-                    # partial files
-                    FH = FastHerbie(DATES=[init_date],
-                                    model=model_herbie,
-                                    product=product,
-                                    fxx=fxx_range,
-                                    priority=priority,
-                                    get_control=get_control,
-                                    )
-                    FH.download(search_str, overwrite=True)
-                    ds = FH.xarray(search_str, remove_grib=False)
-            except Exception as e:
-                print(e)
-                if attempts_remaining:
-                    print('attempt ' + str(attempt_num) + ' failed, pause for '
-                          + str((attempt_num)**2) + ' min')
-                    time.sleep(60*(attempt_num)**2)
-                else:
-                    raise ValueError(f'download failed, ran out of attempts '
-                                     f'with error: {e}')
-            else:
-                break
+                    break
 
-        # use pick_points for single point or list of points
-        ds2 = ds.herbie.pick_points(pd.DataFrame({
-                        "latitude": latitude,
-                        "longitude": longitude,
-                        }))
+            # use pick_points for single point or list of points
+            ds2 = ds.herbie.pick_points(pd.DataFrame({
+                            "latitude": latitude,
+                            "longitude": longitude,
+                            }))
 
-        # convert to dataframe
-        df_temp = (ds2
-                   .to_dataframe()
-                   .reset_index()
-                   .set_index('valid_time')[['point', 't2m']])
-        # add timezone
-        df_temp = df_temp.tz_localize('UTC', level='valid_time')
+            # convert to dataframe
+            df_temp = (ds2
+                       .to_dataframe()
+                       .reset_index()
+                       .set_index('valid_time')[['point', 't2m']])
+            # add timezone
+            df_temp = df_temp.tz_localize('UTC', level='valid_time')
 
-        # convert air temperature units
-        df_temp['temp_air'] = df_temp['t2m'] - 273.15
+            # convert air temperature units
+            df_temp['temp_air'] = df_temp['t2m'] - 273.15
 
-        dfs_temp_air = []
-        # work through sites (points)
-        for point in range(num_sites):
-            df = df_temp[df_temp['point'] == point].copy()
+            dfs_temp_air = []
+            # work through sites (points)
+            for point in range(num_sites):
+                df = df_temp[df_temp['point'] == point].copy()
 
-            # 60min version of data, centered at bottom of the hour
-            # 1min interpolation, then 60min mean
-            df_60min_temp_air = (
-                df[['temp_air']]
-                .resample('1min')
-                .interpolate()
-                .resample('60min').mean()
-            )
+                # 60min version of data, centered at bottom of the hour
+                # 1min interpolation, then 60min mean
+                df_60min_temp_air = (
+                    df[['temp_air']]
+                    .resample('1min')
+                    .interpolate()
+                    .resample('60min').mean()
+                )
 
-            # make timestamps center-labeled for instantaneous pvlib modeling
-            # later
-            df_60min_temp_air.index = df_60min_temp_air.index + \
-                pd.Timedelta('30min')
-            # drop last row, since we don't have data for the last full hour
-            # (just an instantaneous end point)
-            df_60min_temp_air = df_60min_temp_air.iloc[:-1]
+                # make timestamps center-labeled for instantaneous pvlib
+                # modeling later
+                df_60min_temp_air.index = df_60min_temp_air.index + \
+                    pd.Timedelta('30min')
+                # drop last row, since we don't have data for the last full
+                # hour (just an instantaneous end point)
+                df_60min_temp_air = df_60min_temp_air.iloc[:-1]
 
-            # drop unneeded columns if they exist
-            df_60min_temp_air = df_60min_temp_air.drop(['t2m'],
-                                                       axis=1,
-                                                       errors='ignore')
+                # drop unneeded columns if they exist
+                df_60min_temp_air = df_60min_temp_air.drop(['t2m'],
+                                                           axis=1,
+                                                           errors='ignore')
 
-            # add member number and point, drop dummy column
-            # df_60min_temp_air['member'] = pd.NA
-            df_60min_temp_air['point'] = point
+                # add member number and point, drop dummy column
+                # df_60min_temp_air['member'] = pd.NA
+                df_60min_temp_air['point'] = point
 
-            # append
-            dfs_temp_air.append(df_60min_temp_air)
+                # append
+                dfs_temp_air.append(df_60min_temp_air)
 
-        # concat
-        df_60min_temp_air = pd.concat(dfs_temp_air)
+            # concat
+            df_60min_temp_air = pd.concat(dfs_temp_air)
 
-        # final merge
-        df_60min = pd.merge(df_60min_irr,
-                            df_60min_temp_air,
-                            on=['valid_time', 'point'])
+            # final merge
+            df_60min = pd.merge(df_60min_irr,
+                                df_60min_temp_air,
+                                on=['valid_time', 'point'])
 
-        # add generic wind
-        df_60min['wind_speed'] = 2
+        if not get_ens_wind:
+            # add generic wind
+            df_60min['wind_speed'] = 2
 
     elif model == 'gefs':
         search_str = 'DSWRF'
+        if get_ens_temp and not get_ens_wind:
+            search_str = 'DSWRF|:TMP:2 m above'
+        if get_ens_temp and get_ens_wind:
+            search_str = 'DSWRF|:TMP:2 m above|[UV]GRD:10 m above'
         # list of GEFS ensemble members, e.g., 'p01', 'p02', etc.
         num_members = 30
         member_list = [f"p{x:02d}" for x in range(1, num_members+1)]
@@ -1836,6 +1911,9 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                         priority=priority)
                         FH.download(search_str)
                         ds = FH.xarray(search_str, remove_grib=False)
+                        if get_ens_temp:
+                            # merge - override avoids height conflicts
+                            ds = xr.merge(ds, compat='override')
                         # check for missing grib files. if any, raise error
                         # fixes GH #36
                         # see https://github.com/williamhobbs/hefty/issues/36
@@ -1857,6 +1935,9 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                         priority=priority)
                         FH.download(search_str, overwrite=True)
                         ds = FH.xarray(search_str, remove_grib=False)
+                        if get_ens_temp:
+                            # merge - override avoids height conflicts
+                            ds = xr.merge(ds, compat='override')
                         # check for missing grib files. if any, raise error
                         # fixes GH #36
                         # see https://github.com/williamhobbs/hefty/issues/36
@@ -1879,24 +1960,34 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                          f'attempts with error: {e}')
                 else:
                     break
-
+            if get_ens_wind:
+                ds = ds.herbie.with_wind('speed')
             # use pick_points for single point or list of points
             ds2 = ds.herbie.pick_points(pd.DataFrame({
                             "latitude": latitude,
                             "longitude": longitude,
                             }))
+            if get_ens_temp and not get_ens_wind:
+                cols = ['number', 'point', 'sdswrf', 'time', 't2m']
+            elif get_ens_temp and get_ens_wind:
+                cols = ['number', 'point', 'sdswrf', 'time', 't2m', 'si10']
+            else:
+                cols = ['number', 'point', 'sdswrf', 'time']
             # convert to dataframe
             df_temp = (ds2
                        .to_dataframe()
                        .reset_index()
-                       .set_index('valid_time')[['number',
-                                                 'point',
-                                                 'sdswrf',
-                                                 'time']])
+                       .set_index('valid_time')[cols])
             # add timezone
             df_temp = df_temp.tz_localize('UTC', level='valid_time')
             # rename init_time
             df_temp = df_temp.rename(columns={'time': 'init_time'})
+            if get_ens_temp:
+                # convert air temperature units
+                df_temp['temp_air'] = df_temp['t2m'] - 273.15
+            if get_ens_wind:
+                # rename wind speed
+                df_temp = df_temp.rename(columns={'si10': 'wind_speed'})
 
             # work through sites (points) and members
             for point in range(num_sites):
@@ -1955,17 +2046,31 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # avoid divide by zero issues
                 df.loc[df['ghi'] == 0, 'ghi_csi'] = 0
 
-                # make a dummy column
-                df['dummy'] = 0
-
                 # 60min version of data, centered at bottom of the hour
                 # 1min interpolation, then 60min mean
-                df_60min = (
-                    df[['dummy']]
-                    .resample('1min')
-                    .interpolate()
-                    .resample('60min').mean()
-                )
+                if get_ens_temp and not get_ens_wind:
+                    df_60min = (
+                        df[['temp_air']]
+                        .resample('1min')
+                        .interpolate()
+                        .resample('60min').mean()
+                    )
+                elif get_ens_temp and get_ens_wind:
+                    df_60min = (
+                        df[['temp_air', 'wind_speed']]
+                        .resample('1min')
+                        .interpolate()
+                        .resample('60min').mean()
+                    )
+                else:
+                    # make a dummy column
+                    df['dummy'] = 0
+                    df_60min = (
+                        df['dummy']
+                        .resample('1min')
+                        .interpolate()
+                        .resample('60min').mean()
+                    )
                 # make timestamps center-labeled for instantaneous pvlib
                 # modeling later
                 df_60min.index = df_60min.index + pd.Timedelta('30min')
@@ -2015,122 +2120,126 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # add member number and point, drop dummy column
                 df_60min['member'] = ds['number'].values
                 df_60min['point'] = point
-                df_60min = df_60min.drop(columns=['dummy'])
+                if not get_ens_temp:
+                    df_60min = df_60min.drop(columns=['dummy'])
 
                 # append
                 dfs.append(df_60min)
 
         # convert to dataframe
         df_60min_irr = pd.concat(dfs)
+        df_60min = df_60min_irr.copy()
 
-        # get deterministic temp_air
-        search_str = ':TMP:2 m above'
-        member = 'c00'  # use the control member
+        if not get_ens_temp:
+            # get deterministic temp_air
+            search_str = ':TMP:2 m above'
+            member = 'c00'  # use the control member
 
-        # try n times based loosely on
-        # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
-        for attempts_remaining in reversed(range(attempts)):
-            attempt_num = attempts - attempts_remaining
-            try:
-                if attempt_num == 1:
-                    # try downloading
-                    FH = FastHerbie(DATES=[init_date],
-                                    model=model_herbie,
-                                    product=product,
-                                    fxx=fxx_range,
-                                    member=member,
-                                    priority=priority)
-                    FH.download(search_str)
-                    ds = FH.xarray(search_str, remove_grib=False)
+            # try n times based loosely on
+            # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
+            for attempts_remaining in reversed(range(attempts)):
+                attempt_num = attempts - attempts_remaining
+                try:
+                    if attempt_num == 1:
+                        # try downloading
+                        FH = FastHerbie(DATES=[init_date],
+                                        model=model_herbie,
+                                        product=product,
+                                        fxx=fxx_range,
+                                        member=member,
+                                        priority=priority)
+                        FH.download(search_str)
+                        ds = FH.xarray(search_str, remove_grib=False)
+                    else:
+                        # after first attempt, set overwrite=True to overwrite
+                        # partial files
+                        FH = FastHerbie(DATES=[init_date],
+                                        model=model_herbie,
+                                        product=product,
+                                        fxx=fxx_range,
+                                        member=member,
+                                        priority=priority)
+                        FH.download(search_str, overwrite=True)
+                        ds = FH.xarray(search_str, remove_grib=False)
+                except Exception as e:
+                    print(e)
+                    if attempts_remaining:
+                        print(f'attempt {str(attempt_num)} failed, pause'
+                              f' for {str((attempt_num)**2)} min')
+                        time.sleep(60*(attempt_num)**2)
+                    else:
+                        raise ValueError(f'download failed, ran out of '
+                                         f'attempts with error: {e}')
                 else:
-                    # after first attempt, set overwrite=True to overwrite
-                    # partial files
-                    FH = FastHerbie(DATES=[init_date],
-                                    model=model_herbie,
-                                    product=product,
-                                    fxx=fxx_range,
-                                    member=member,
-                                    priority=priority)
-                    FH.download(search_str, overwrite=True)
-                    ds = FH.xarray(search_str, remove_grib=False)
-            except Exception as e:
-                print(e)
-                if attempts_remaining:
-                    print('attempt ' + str(attempt_num) + ' failed, pause for '
-                          + str((attempt_num)**2) + ' min')
-                    time.sleep(60*(attempt_num)**2)
-                else:
-                    raise ValueError(f'download failed, ran out of '
-                                     f'attempts with error: {e}')
+                    break
+
+            # use pick_points for single point or list of points
+            ds2 = ds.herbie.pick_points(pd.DataFrame({
+                            "latitude": latitude,
+                            "longitude": longitude,
+                            }))
+            # convert to dataframe
+            df_temp = (ds2
+                       .to_dataframe()
+                       .reset_index()
+                       .set_index('valid_time')[['point', 't2m', 'time']])
+            # add timezone
+            df_temp = df_temp.tz_localize('UTC', level='valid_time')
+            # rename init_time
+            df_temp = df_temp.rename(columns={'time': 'init_time'})
+
+            # convert air temperature units
+            df_temp['temp_air'] = df_temp['t2m'] - 273.15
+
+            # work through sites (points)
+            if type(latitude) is float or type(latitude) is int:
+                num_sites = 1
             else:
-                break
+                num_sites = len(latitude)
 
-        # use pick_points for single point or list of points
-        ds2 = ds.herbie.pick_points(pd.DataFrame({
-                        "latitude": latitude,
-                        "longitude": longitude,
-                        }))
-        # convert to dataframe
-        df_temp = (ds2
-                   .to_dataframe()
-                   .reset_index()
-                   .set_index('valid_time')[['point', 't2m', 'time']])
-        # add timezone
-        df_temp = df_temp.tz_localize('UTC', level='valid_time')
-        # rename init_time
-        df_temp = df_temp.rename(columns={'time': 'init_time'})
+            dfs_temp_air = []
+            for point in range(num_sites):
+                df = df_temp[(df_temp['point'] == point)].copy()
 
-        # convert air temperature units
-        df_temp['temp_air'] = df_temp['t2m'] - 273.15
+                # 60min version of data, centered at bottom of the hour
+                # 1min interpolation, then 60min mean
+                df_60min_temp_air = (
+                    df[['temp_air']]
+                    .resample('1min')
+                    .interpolate()
+                    .resample('60min').mean()
+                )
 
-        # work through sites (points)
-        if type(latitude) is float or type(latitude) is int:
-            num_sites = 1
-        else:
-            num_sites = len(latitude)
+                # make timestamps center-labeled for instantaneous pvlib
+                # modeling later
+                df_60min_temp_air.index = df_60min_temp_air.index + \
+                    pd.Timedelta('30min')
+                # drop last row, since we don't have data for the last ful
+                # hour (just an instantaneous end point)
+                df_60min_temp_air = df_60min_temp_air.iloc[:-1]
 
-        dfs_temp_air = []
-        for point in range(num_sites):
-            df = df_temp[(df_temp['point'] == point)].copy()
+                # drop unneeded columns if they exist
+                df_60min_temp_air = df_60min_temp_air.drop(['t2m'],
+                                                           axis=1,
+                                                           errors='ignore')
 
-            # 60min version of data, centered at bottom of the hour
-            # 1min interpolation, then 60min mean
-            df_60min_temp_air = (
-                df[['temp_air']]
-                .resample('1min')
-                .interpolate()
-                .resample('60min').mean()
-            )
+                # add member number and point, drop dummy column
+                # df_60min_temp_air['member'] = pd.NA
+                df_60min_temp_air['point'] = point
 
-            # make timestamps center-labeled for instantaneous pvlib modeling
-            # later
-            df_60min_temp_air.index = df_60min_temp_air.index + \
-                pd.Timedelta('30min')
-            # drop last row, since we don't have data for the last full hour
-            # (just an instantaneous end point)
-            df_60min_temp_air = df_60min_temp_air.iloc[:-1]
+                # append
+                dfs_temp_air.append(df_60min_temp_air)
 
-            # drop unneeded columns if they exist
-            df_60min_temp_air = df_60min_temp_air.drop(['t2m'],
-                                                       axis=1,
-                                                       errors='ignore')
+            # concat
+            df_60min_temp_air = pd.concat(dfs_temp_air)
 
-            # add member number and point, drop dummy column
-            # df_60min_temp_air['member'] = pd.NA
-            df_60min_temp_air['point'] = point
+            # final merge
+            df_60min = pd.merge(df_60min_irr,
+                                df_60min_temp_air,
+                                on=['valid_time', 'point'])
 
-            # append
-            dfs_temp_air.append(df_60min_temp_air)
-
-        # concat
-        df_60min_temp_air = pd.concat(dfs_temp_air)
-
-        # final merge
-        df_60min = pd.merge(df_60min_irr,
-                            df_60min_temp_air,
-                            on=['valid_time', 'point'])
-
-        # add generic wind
-        df_60min['wind_speed'] = 2
+        if not get_ens_wind:
+            # add generic wind
+            df_60min['wind_speed'] = 2
 
     return df_60min
