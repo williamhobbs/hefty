@@ -20,7 +20,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                        lead_time_to_start=0, model='gfs', member='avg',
                        attempts=2, hrrr_hour_middle=True,
                        hrrr_coursen_window=None, priority=None,
-                       cams_api_key=None, cams_area=None):
+                       cams_api_key=None, cams_area=None,
+                       decomp_model='dirindex'):
     """
     Get a solar resource forecast for one or several sites from one of several
     NWPs. This function uses Herbie [1]_ and pvlib [2]_.
@@ -96,6 +97,11 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         South, and East corners of the area to be covered when using 'cams'.
         For example, [50, -125, 20, -65] approximately covers CONUS.
 
+    decomp_model : string, optional
+        Decomposition model to use for forecast models that don't include DNI.
+        Options include 'dirindex' and 'erbs'. Note that HRRR and CAMS include
+        DNI, so this parameter does not apply to those models.
+
     Returns
     -------
     data : pandas.DataFrane
@@ -113,7 +119,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
     """
 
     # set clear sky model. could be an input variable at some point
-    model_cs = 'simplified_solis'
+    # model_cs = 'simplified_solis'
     model_cs_kwargs = {
         'aod700': 0.05,
         'precipitable_water': 0.5,
@@ -144,6 +150,11 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
     # get NWP data as dataframe
     if model != 'cams':
+        delimiter = '|'
+        search_string_list = search_str.split(delimiter)
+        num_datasets = len(search_string_list)
+        if model == 'hrrr':
+            num_datasets -= 1  # DNI and GHI will show up in a single dataset
         i = []
         for fxx in fxx_range:
             # get solar, 10m wind, and 2m temp data
@@ -162,6 +173,13 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                             member=member,
                             priority=priority
                             ).xarray(search_str)
+                        # address GH#77
+                        if len(ds) < num_datasets:
+                            msg = ('Parameters appear to be '
+                                   'missing. Another download'
+                                   ' will be attempted if there are attempts'
+                                   ' remaining.')
+                            raise ValueError(msg)
                         # merge - override avoids height conflict between 2m
                         # temp and 10m wind
                         ds = xr.merge(ds, compat='override')
@@ -176,6 +194,13 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                             member=member,
                             priority=priority
                             ).xarray(search_str, overwrite=True)
+                        # address GH#77
+                        if len(ds) < num_datasets:
+                            msg = ('Parameters appear to be '
+                                   'missing. Another download'
+                                   ' will be attempted if there are attempts'
+                                   ' remaining.')
+                            raise ValueError(msg)
                         # merge - override avoids height conflict between 2m
                         # temp and 10m wind
                         ds = xr.merge(ds, compat='override')
@@ -407,7 +432,16 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 tz='UTC')
 
             # calculate clear sky ghi with pvlib
-            cs = loc.get_clearsky(times, model=model_cs, **model_cs_kwargs)
+            sp = pvlib.solarposition.ephemeris(
+                times,
+                loc.latitude,
+                loc.longitude
+            )
+            apparent_elevation = sp['apparent_elevation']
+            cs = pvlib.clearsky.simplified_solis(
+                apparent_elevation,
+                **model_cs_kwargs
+            )
 
             # calculate average CS ghi over the intervals from the forecast
             # based on list comprehension example in
@@ -458,7 +492,18 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 end=df.index[-1]-pd.Timedelta('30m'),
                 freq='60min',
                 tz='UTC')
-            cs = loc.get_clearsky(times, model=model_cs, **model_cs_kwargs)
+
+            # calculate clear sky ghi with pvlib
+            sp = pvlib.solarposition.ephemeris(
+                times,
+                loc.latitude,
+                loc.longitude
+            )
+            apparent_elevation = sp['apparent_elevation']
+            cs = pvlib.clearsky.simplified_solis(
+                apparent_elevation,
+                **model_cs_kwargs
+            )
 
             # calculate ghi from clear sky and backfilled forecasted clear sky
             # index
@@ -467,16 +512,31 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # clip to avoid occasional small negative ghi in GEFS, see GH #35
             df_60min['ghi'] = df_60min['ghi'].clip(lower=0)
 
-            # dni and dhi using pvlib erbs. could also DIRINT or
-            # erbs-driesse
-            sp = loc.get_solarposition(times)
-            out_erbs = pvlib.irradiance.erbs(
-                df_60min['ghi'],
-                sp['zenith'],
-                df_60min.index,
-            )
-            df_60min['dni'] = out_erbs['dni']
-            df_60min['dhi'] = out_erbs['dhi']
+            # decompose
+            if decomp_model == 'erbs':
+                out_erbs = pvlib.irradiance.erbs(
+                    df_60min['ghi'],
+                    sp['zenith'],
+                    df_60min.index,
+                )
+                df_60min['dni'] = out_erbs['dni']
+                df_60min['dhi'] = out_erbs['dhi']
+            elif decomp_model == 'dirindex':
+                cs_decomp = cs  # could later use a different cs model...
+                decomp = pvlib.irradiance.dirindex(
+                    ghi=df_60min['ghi'],
+                    ghi_clear=cs_decomp['ghi'],
+                    dni_clear=cs_decomp['dni'],
+                    zenith=sp['zenith'],
+                    times=times,
+                )
+                df_60min['dni'] = decomp.fillna(0)
+                cos_zenith = np.maximum(
+                    np.cos(np.deg2rad(sp['apparent_zenith'])),
+                    min_cos_zenith
+                )
+                df_60min['dhi'] = (df_60min['ghi'] -
+                                   (df_60min['dni'] * cos_zenith))
 
             # add clearsky ghi
             df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
@@ -500,7 +560,11 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             df.index = df.index - pd.Timedelta('30min')
 
             # direct horiz clear to dni_clear
-            sp = loc.get_solarposition(df.index)
+            sp = pvlib.solarposition.ephemeris(
+                df.index,
+                loc.latitude,
+                loc.longitude
+            )
             cos_zenith = np.maximum(np.cos(np.deg2rad(sp['apparent_zenith'])),
                                     min_cos_zenith)
             df['dni_clear'] = (df['direct_horiz_clear'] / cos_zenith)
@@ -523,8 +587,16 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             if hrrr_hour_middle is True:
                 # clear sky index
                 times = df.index
-                cs = loc.get_clearsky(times, model=model_cs,
-                                      **model_cs_kwargs)
+                sp = pvlib.solarposition.ephemeris(
+                    times,
+                    loc.latitude,
+                    loc.longitude
+                )
+                apparent_elevation = sp['apparent_elevation']
+                cs = pvlib.clearsky.simplified_solis(
+                    apparent_elevation,
+                    **model_cs_kwargs
+                )
                 df['csi_ghi'] = df['ghi'] / cs['ghi']
                 df['csi_dni'] = df['dni'] / cs['dni']
                 # avoid divide by zero issues
@@ -538,8 +610,18 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                     freq='1min',
                     tz='UTC')
 
-                cs = loc.get_clearsky(times, model=model_cs,
-                                      **model_cs_kwargs)
+                # calculate clear sky ghi with pvlib
+                sp = pvlib.solarposition.ephemeris(
+                    times,
+                    loc.latitude,
+                    loc.longitude
+                )
+                apparent_elevation = sp['apparent_elevation']
+                cs = pvlib.clearsky.simplified_solis(
+                    apparent_elevation,
+                    **model_cs_kwargs
+                )
+
                 # calculate 1min interpolated temp_air, wind_speed, csi
                 df_01min = (
                     df[['temp_air', 'wind_speed', 'csi_ghi', 'csi_dni']]
@@ -561,15 +643,22 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 df_60min = df.copy()
 
             # calculate dhi from ghi, dni, solar position
-            sp = loc.get_solarposition(df_60min.index)
+            sp = pvlib.solarposition.ephemeris(
+                    df_60min.index,
+                    loc.latitude,
+                    loc.longitude
+                )
             cos_zenith = np.maximum(np.cos(np.deg2rad(sp['apparent_zenith'])),
                                     min_cos_zenith)
             df_60min['dhi'] = (df_60min['ghi'] -
                                (df_60min['dni'] * cos_zenith))
 
             # add clearsky ghi
-            cs = loc.get_clearsky(df_60min.index, model=model_cs,
-                                  **model_cs_kwargs)
+            apparent_elevation = sp['apparent_elevation']
+            cs = pvlib.clearsky.simplified_solis(
+                apparent_elevation,
+                **model_cs_kwargs
+            )
             df_60min['ghi_clear'] = cs['ghi']
             df_60min['dni_clear'] = cs['dni']
 
@@ -595,7 +684,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                             lead_time_to_start=0, model='gfs', member='avg',
                             attempts=2, hrrr_hour_middle=True,
-                            hrrr_coursen_window=None, priority=None):
+                            hrrr_coursen_window=None, priority=None,
+                            decomp_model='dirindex'):
     """
     Get a solar resource forecast for one or several sites from one of several
     NWPs. This function uses Herbie [1]_ and pvlib [2]_. This version
@@ -665,6 +755,11 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         priority, or string for a single source. See Herbie docs.
         Typical values would be 'aws' or 'google'.
 
+    decomp_model : string, optional
+        Decomposition model to use for forecast models that don't include DNI.
+        Options include 'dirindex' and 'erbs'. Note that HRRR and CAMS include
+        DNI, so this parameter does not apply to those models.
+
     Returns
     -------
     data : pandas.DataFrane
@@ -730,6 +825,10 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                     FH.download(search_string_list[j])
                     ds_dict[j] = FH.xarray(search_string_list[j],
                                            remove_grib=True)
+                    # calculate wind speed from u and v components if relevant
+                    if ('uv' in search_string_list[j] or
+                            'UV' in search_string_list[j]):
+                        ds_dict[j] = ds_dict[j].herbie.with_wind('speed')
                     # merge - override avoids height conflict between 2m temp
                     # and 10m wind
                     ds = xr.merge(ds_dict.values(), compat='override')
@@ -740,6 +839,10 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                     ds_dict[j] = FH.xarray(search_string_list[j],
                                            remove_grib=True,
                                            overwrite=True)
+                    # calculate wind speed from u and v components if relevant
+                    if ('uv' in search_string_list[j] or
+                            'UV' in search_string_list[j]):
+                        ds_dict[j] = ds_dict[j].herbie.with_wind('speed')
                     # merge - override avoids height conflict between 2m temp
                     # and 10m wind
                     ds = xr.merge(ds_dict.values(), compat='override')
@@ -754,9 +857,6 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                                      f'with error: {e}')
             else:
                 break
-
-        # calculate wind speed from u and v components
-        ds = ds.herbie.with_wind('speed')
 
         if model == 'hrrr' and hrrr_coursen_window is not None:
             ds = ds.coarsen(x=hrrr_coursen_window,
@@ -849,7 +949,17 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                 freq='1min',
                 tz='UTC')
 
-            cs = loc.get_clearsky(times, model=model_cs, **model_cs_kwargs)
+            # calculate clear sky ghi with pvlib
+            sp = pvlib.solarposition.ephemeris(
+                times,
+                loc.latitude,
+                loc.longitude
+            )
+            apparent_elevation = sp['apparent_elevation']
+            cs = pvlib.clearsky.simplified_solis(
+                apparent_elevation,
+                **model_cs_kwargs
+            )
 
             # calculate average CS ghi over the intervals from the forecast
             # based on list comprehension example in
@@ -898,7 +1008,18 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                 end=df.index[-1]-pd.Timedelta('30m'),
                 freq='60min',
                 tz='UTC')
-            cs = loc.get_clearsky(times, model=model_cs, **model_cs_kwargs)
+
+            # calculate clear sky ghi with pvlib
+            sp = pvlib.solarposition.ephemeris(
+                times,
+                loc.latitude,
+                loc.longitude
+            )
+            apparent_elevation = sp['apparent_elevation']
+            cs = pvlib.clearsky.simplified_solis(
+                apparent_elevation,
+                **model_cs_kwargs
+            )
 
             # calculate ghi from clear sky and backfilled forecasted clear sky
             # index
@@ -907,15 +1028,31 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             # clip to avoid occasional small negative ghi in GEFS, see GH #35
             df_60min['ghi'] = df_60min['ghi'].clip(lower=0)
 
-            # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
-            sp = loc.get_solarposition(times)
-            out_erbs = pvlib.irradiance.erbs(
-                df_60min['ghi'],
-                sp['zenith'],
-                df_60min.index,
-            )
-            df_60min['dni'] = out_erbs['dni']
-            df_60min['dhi'] = out_erbs['dhi']
+            # decompose
+            if decomp_model == 'erbs':
+                out_erbs = pvlib.irradiance.erbs(
+                    df_60min['ghi'],
+                    sp['zenith'],
+                    df_60min.index,
+                )
+                df_60min['dni'] = out_erbs['dni']
+                df_60min['dhi'] = out_erbs['dhi']
+            elif decomp_model == 'dirindex':
+                cs_decomp = cs  # could later use a different cs model...
+                decomp = pvlib.irradiance.dirindex(
+                    ghi=df_60min['ghi'],
+                    ghi_clear=cs_decomp['ghi'],
+                    dni_clear=cs_decomp['dni'],
+                    zenith=sp['zenith'],
+                    times=times,
+                )
+                df_60min['dni'] = decomp.fillna(0)
+                cos_zenith = np.maximum(
+                    np.cos(np.deg2rad(sp['apparent_zenith'])),
+                    min_cos_zenith
+                )
+                df_60min['dhi'] = (df_60min['ghi'] -
+                                   (df_60min['dni'] * cos_zenith))
 
             # add clearsky ghi
             df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
@@ -941,8 +1078,18 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                     freq='1min',
                     tz='UTC')
 
-                cs = loc.get_clearsky(times, model=model_cs,
-                                      **model_cs_kwargs)
+                # calculate clear sky ghi with pvlib
+                sp = pvlib.solarposition.ephemeris(
+                    times,
+                    loc.latitude,
+                    loc.longitude
+                )
+                apparent_elevation = sp['apparent_elevation']
+                cs = pvlib.clearsky.simplified_solis(
+                    apparent_elevation,
+                    **model_cs_kwargs
+                )
+
                 # calculate 1min interpolated temp_air, wind_speed, csi
                 df_01min = (
                     df[['temp_air', 'wind_speed', 'csi_ghi', 'csi_dni']]
@@ -964,15 +1111,22 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                 df_60min = df.copy()
 
             # calculate dhi from ghi, dni, solar position
-            sp = loc.get_solarposition(df_60min.index)
+            sp = pvlib.solarposition.ephemeris(
+                    df_60min.index,
+                    loc.latitude,
+                    loc.longitude
+                )
             cos_zenith = np.maximum(np.cos(np.deg2rad(sp['apparent_zenith'])),
                                     min_cos_zenith)
             df_60min['dhi'] = (df_60min['ghi'] -
                                (df_60min['dni'] * cos_zenith))
 
             # add clearsky ghi
-            cs = loc.get_clearsky(df_60min.index, model=model_cs,
-                                  **model_cs_kwargs)
+            apparent_elevation = sp['apparent_elevation']
+            cs = pvlib.clearsky.simplified_solis(
+                apparent_elevation,
+                **model_cs_kwargs
+            )
             df_60min['ghi_clear'] = cs['ghi']
             df_60min['dni_clear'] = cs['dni']
 
@@ -997,7 +1151,8 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
 
 def get_solar_forecast_ensemble_subset(
         latitude, longitude, init_date, run_length, lead_time_to_start=0,
-        model='ifs_ens', attempts=2, num_members=3, priority=None):
+        model='ifs_ens', attempts=2, num_members=3, priority=None,
+        decomp_model='dirindex'):
     """
     Get solar resource forecasts for one or several sites using a subset of
     ensemble members. Use `get_solar_forecast_ensemble` for all ensemble
@@ -1048,6 +1203,9 @@ def get_solar_forecast_ensemble_subset(
         priority, or string for a single source. See Herbie docs.
         Typical values would be 'aws' or 'google'.
 
+    decomp_model : string, optional
+        Decomposition model to use. Options include 'dirindex' and 'erbs'.
+
     Returns
     -------
     data : pandas.DataFrane
@@ -1065,11 +1223,14 @@ def get_solar_forecast_ensemble_subset(
     """
 
     # set clear sky model. could be an input variable at some point
-    model_cs = 'simplified_solis'
+    # model_cs = 'simplified_solis'
     model_cs_kwargs = {
         'aod700': 0.05,
         'precipitable_water': 0.5,
     }
+    # minimum cosine of zenith, same default used in pvlib.irradiance
+    # functions. Could be an input variable at some point
+    min_cos_zenith = 0.065
 
     # check model
     if model.casefold() != ('ifs_ens').casefold():
@@ -1170,7 +1331,18 @@ def get_solar_forecast_ensemble_subset(
                 end=df.index[-1],
                 freq='1min',
                 tz='UTC')
-            cs = loc.get_clearsky(times, model=model_cs, **model_cs_kwargs)
+
+            # calculate clear sky ghi with pvlib
+            sp = pvlib.solarposition.ephemeris(
+                times,
+                loc.latitude,
+                loc.longitude
+            )
+            apparent_elevation = sp['apparent_elevation']
+            cs = pvlib.clearsky.simplified_solis(
+                apparent_elevation,
+                **model_cs_kwargs
+            )
 
             # calculate average CS ghi over the intervals from the forecast
             # based on list comprehension example in
@@ -1222,7 +1394,18 @@ def get_solar_forecast_ensemble_subset(
                 end=df.index[-1]-pd.Timedelta('30m'),
                 freq='60min',
                 tz='UTC')
-            cs = loc.get_clearsky(times, model=model_cs, **model_cs_kwargs)
+
+            # calculate clear sky ghi with pvlib
+            sp = pvlib.solarposition.ephemeris(
+                times,
+                loc.latitude,
+                loc.longitude
+            )
+            apparent_elevation = sp['apparent_elevation']
+            cs = pvlib.clearsky.simplified_solis(
+                apparent_elevation,
+                **model_cs_kwargs
+            )
 
             # calculate ghi from clear sky and backfilled forecasted clear sky
             # index
@@ -1231,15 +1414,31 @@ def get_solar_forecast_ensemble_subset(
             # clip to avoid occasional small negative ghi in GEFS, see GH #35
             df_60min['ghi'] = df_60min['ghi'].clip(lower=0)
 
-            # dni and dhi using pvlib erbs. could also DIRINT or erbs-driesse
-            sp = loc.get_solarposition(times)
-            out_erbs = pvlib.irradiance.erbs(
-                df_60min['ghi'],
-                sp['zenith'],
-                df_60min.index,
-            )
-            df_60min['dni'] = out_erbs['dni']
-            df_60min['dhi'] = out_erbs['dhi']
+            # decompose
+            if decomp_model == 'erbs':
+                out_erbs = pvlib.irradiance.erbs(
+                    df_60min['ghi'],
+                    sp['zenith'],
+                    df_60min.index,
+                )
+                df_60min['dni'] = out_erbs['dni']
+                df_60min['dhi'] = out_erbs['dhi']
+            elif decomp_model == 'dirindex':
+                cs_decomp = cs  # could later use a different cs model...
+                decomp = pvlib.irradiance.dirindex(
+                    ghi=df_60min['ghi'],
+                    ghi_clear=cs_decomp['ghi'],
+                    dni_clear=cs_decomp['dni'],
+                    zenith=sp['zenith'],
+                    times=times,
+                )
+                df_60min['dni'] = decomp.fillna(0)
+                cos_zenith = np.maximum(
+                    np.cos(np.deg2rad(sp['apparent_zenith'])),
+                    min_cos_zenith
+                )
+                df_60min['dhi'] = (df_60min['ghi'] -
+                                   (df_60min['dni'] * cos_zenith))
 
             # add clearsky ghi
             df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
@@ -1368,7 +1567,8 @@ def get_solar_forecast_ensemble_subset(
 def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                 lead_time_to_start=0, model='ifs_ens',
                                 attempts=2, priority=None,
-                                get_ens_temp=False, get_ens_wind=False):
+                                get_ens_temp=False, get_ens_wind=False,
+                                decomp_model='dirindex'):
     """
     Get solar resource forecasts for one or several sites using all ensemble
     members. Using `get_solar_forecast_ensemble_subset` may be fast for a
@@ -1433,6 +1633,9 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
         Get wind speed from each ensemble member if `True`. Otherwise, if
         `False` (default), wind speed is a generic 2 m/s value to save time.
 
+    decomp_model : string, optional
+        Decomposition model to use. Options include 'dirindex' and 'erbs'.
+
     Returns
     -------
     data : pandas.DataFrane
@@ -1450,11 +1653,14 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
     """
 
     # set clear sky model. could be an input variable at some point
-    model_cs = 'simplified_solis'
+    # model_cs = 'simplified_solis'
     model_cs_kwargs = {
         'aod700': 0.05,
         'precipitable_water': 0.5,
     }
+    # minimum cosine of zenith, same default used in pvlib.irradiance
+    # functions. Could be an input variable at some point
+    min_cos_zenith = 0.065
 
     # check model
     if (
@@ -1640,34 +1846,68 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
         # work through sites (points) and members
         member_list = df_temp['number'].unique()
         dfs = []
-        for number in member_list:
-            for point in range(num_sites):
-                df = df_temp[(df_temp['point'] == point) &
-                             (df_temp['number'] == number)].copy()
+        for point in range(num_sites):
+            # set of timestamps for solar position and clear sky
+            df = df_temp[(df_temp['point'] == point) &
+                         (df_temp['number'] == member_list[0])].copy()
 
-                loc = pvlib.location.Location(
+            # location
+            loc = pvlib.location.Location(
                     latitude=latitude[point],
                     longitude=longitude[point],
                     tz=df.index.tz
                     )
 
+            # make 1min interval clear sky data covering our time range
+            times_1min = pd.date_range(
+                start=df.index[0],
+                end=df.index[-1],
+                freq='1min',
+                tz='UTC')
+
+            # calculate clear sky ghi with pvlib
+            sp_1min = pvlib.solarposition.ephemeris(
+                times_1min,
+                loc.latitude,
+                loc.longitude
+            )
+            apparent_elevation_1min = sp_1min['apparent_elevation']
+            cs_1min = pvlib.clearsky.simplified_solis(
+                apparent_elevation_1min,
+                **model_cs_kwargs
+            )
+
+            # make 60min interval clear sky, centered at bottom of the hour
+            times_60min = pd.date_range(
+                start=df.index[0]+pd.Timedelta('30m'),
+                end=df.index[-1]-pd.Timedelta('30m'),
+                freq='60min',
+                tz='UTC')
+
+            # calculate clear sky ghi with pvlib
+            sp_60min = pvlib.solarposition.ephemeris(
+                times_60min,
+                loc.latitude,
+                loc.longitude
+            )
+            apparent_elevation_60min = sp_60min['apparent_elevation']
+            cs_60min = pvlib.clearsky.simplified_solis(
+                apparent_elevation_60min,
+                **model_cs_kwargs
+            )
+
+            for number in member_list:
+                df = df_temp[(df_temp['point'] == point) &
+                             (df_temp['number'] == number)].copy()
+
                 # convert cumulative J/m^s to average W/m^2
                 df['ghi'] = (df['sdswrf'].diff() /
                              df.index.diff().seconds.values)
 
-                # make 1min interval clear sky data covering our time range
-                times = pd.date_range(
-                    start=df.index[0],
-                    end=df.index[-1],
-                    freq='1min',
-                    tz='UTC')
-                cs = loc.get_clearsky(times, model=model_cs,
-                                      **model_cs_kwargs)
-
                 # calculate average CS ghi over the intervals from the forecast
                 # based on list comprehension example in
                 # https://stackoverflow.com/a/55724134/27574852
-                ghi = cs['ghi']
+                ghi = cs_1min['ghi']
                 dates = df.index
                 ghi_clear = [
                     ghi.loc[(ghi.index > dates[i]) & (ghi.index <= dates[i+1])]
@@ -1722,29 +1962,35 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                     direction='forward'
                 ).set_index('valid_time')
 
-                # make 60min interval clear sky, centered at bottom of the hour
-                times = pd.date_range(
-                    start=df.index[0]+pd.Timedelta('30m'),
-                    end=df.index[-1]-pd.Timedelta('30m'),
-                    freq='60min',
-                    tz='UTC')
-                cs = loc.get_clearsky(times, model=model_cs,
-                                      **model_cs_kwargs)
-
                 # calculate ghi from clear sky and backfilled forecasted clear
                 # sky index
-                df_60min['ghi'] = cs['ghi'] * df_60min['ghi_csi']
+                df_60min['ghi'] = cs_60min['ghi'] * df_60min['ghi_csi']
 
-                # dni and dhi using pvlib erbs. could also DIRINT or
-                # erbs-driesse
-                sp = loc.get_solarposition(times)
-                out_erbs = pvlib.irradiance.erbs(
-                    df_60min['ghi'],
-                    sp['zenith'],
-                    df_60min.index,
-                )
-                df_60min['dni'] = out_erbs['dni']
-                df_60min['dhi'] = out_erbs['dhi']
+                # decompose
+                if decomp_model == 'erbs':
+                    out_erbs = pvlib.irradiance.erbs(
+                        df_60min['ghi'],
+                        sp_60min['zenith'],
+                        df_60min.index,
+                    )
+                    df_60min['dni'] = out_erbs['dni']
+                    df_60min['dhi'] = out_erbs['dhi']
+                elif decomp_model == 'dirindex':
+                    cs_decomp = cs_60min  # could later use another cs model
+                    decomp = pvlib.irradiance.dirindex(
+                        ghi=df_60min['ghi'],
+                        ghi_clear=cs_decomp['ghi'],
+                        dni_clear=cs_decomp['dni'],
+                        zenith=sp_60min['zenith'],
+                        times=times_60min,
+                    )
+                    df_60min['dni'] = decomp.fillna(0)
+                    cos_zenith = np.maximum(
+                        np.cos(np.deg2rad(sp_60min['apparent_zenith'])),
+                        min_cos_zenith
+                    )
+                    df_60min['dhi'] = (df_60min['ghi'] -
+                                       (df_60min['dni'] * cos_zenith))
 
                 # add clearsky ghi
                 df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
@@ -2026,8 +2272,17 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                     freq='1min',
                     tz='UTC')
 
-                cs = loc.get_clearsky(times, model=model_cs,
-                                      **model_cs_kwargs)
+                # calculate clear sky ghi with pvlib
+                sp = pvlib.solarposition.ephemeris(
+                    times,
+                    loc.latitude,
+                    loc.longitude
+                )
+                apparent_elevation = sp['apparent_elevation']
+                cs = pvlib.clearsky.simplified_solis(
+                    apparent_elevation,
+                    **model_cs_kwargs
+                )
 
                 # calculate average CS ghi over the intervals from the forecast
                 # based on list comprehension example in
@@ -2093,8 +2348,18 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                     end=df.index[-1]-pd.Timedelta('30m'),
                     freq='60min',
                     tz='UTC')
-                cs = loc.get_clearsky(times, model=model_cs,
-                                      **model_cs_kwargs)
+
+                # calculate clear sky ghi with pvlib
+                sp = pvlib.solarposition.ephemeris(
+                    times,
+                    loc.latitude,
+                    loc.longitude
+                )
+                apparent_elevation = sp['apparent_elevation']
+                cs = pvlib.clearsky.simplified_solis(
+                    apparent_elevation,
+                    **model_cs_kwargs
+                )
 
                 # calculate ghi from clear sky and backfilled forecasted clear
                 # sky index
@@ -2103,16 +2368,31 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # clip to avoid occasional small negative ghi in GEFS, GH #35
                 df_60min['ghi'] = df_60min['ghi'].clip(lower=0)
 
-                # dni and dhi using pvlib erbs. could also DIRINT or
-                # erbs-driesse
-                sp = loc.get_solarposition(times)
-                out_erbs = pvlib.irradiance.erbs(
-                    df_60min['ghi'],
-                    sp['zenith'],
-                    df_60min.index,
-                )
-                df_60min['dni'] = out_erbs['dni']
-                df_60min['dhi'] = out_erbs['dhi']
+                # decompose
+                if decomp_model == 'erbs':
+                    out_erbs = pvlib.irradiance.erbs(
+                        df_60min['ghi'],
+                        sp['zenith'],
+                        df_60min.index,
+                    )
+                    df_60min['dni'] = out_erbs['dni']
+                    df_60min['dhi'] = out_erbs['dhi']
+                elif decomp_model == 'dirindex':
+                    cs_decomp = cs  # could later use a different cs model...
+                    decomp = pvlib.irradiance.dirindex(
+                        ghi=df_60min['ghi'],
+                        ghi_clear=cs_decomp['ghi'],
+                        dni_clear=cs_decomp['dni'],
+                        zenith=sp['zenith'],
+                        times=times,
+                    )
+                    df_60min['dni'] = decomp.fillna(0)
+                    cos_zenith = np.maximum(
+                        np.cos(np.deg2rad(sp['apparent_zenith'])),
+                        min_cos_zenith
+                    )
+                    df_60min['dhi'] = (df_60min['ghi'] -
+                                       (df_60min['dni'] * cos_zenith))
 
                 # add clearsky ghi
                 df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
