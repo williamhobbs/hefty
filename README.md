@@ -7,13 +7,13 @@ This repository currently includes solar and wind tools, but may expand one day 
 - NOAA HRRR
 - ECMWF IFS (open data version)
 - ECMWF AIFS
-- ECMWF CAMS* version of IFS (a.k.a. "IFS-COMPO")
+- ECMWF CAMS version of IFS* (a.k.a. "IFS-COMPO")
 
 A detailed pvlib-based PV weather-to-power model is included in [pv_model.py](src/hefty/pv_model.py), `model_pv_power()`.
 
 The [custom.py](src/hefty/custom.py) module is intended to help with getting forecasts of "custom" weather parameters, not necessarily specific to wind or solar, which migh be useful for load forecasting.
 
-_*CAMS IFS is only available via `hefty.solar.get_solar_forecast()`, and it requires `cdsapi` to be installed and the user needs an API key (see https://ads.atmosphere.copernicus.eu/how-to-api)._
+_*CAMS IFS is only available via `hefty.solar.get_solar_forecast()`, and it requires `cdsapi` to be installed and the user needs an API key (see https://ads.atmosphere.copernicus.eu/how-to-api and the [CAMS example notebook](examples/cams_example.ipynb))._
 
 ## Contents
 - [Installation](#installation) - getting started
@@ -108,7 +108,8 @@ The [examples](examples) folder contains several example Jupyter notebooks.
 - [more_solar_examples.ipynb](examples/more_solar_examples.ipynb): Expanded examples, including multiple sites and multiple forecast initialization times.
 - [cams_example.ipynb](examples/cams_example.ipynb): Solar resource forecasting with CAMS IFS.
 - [ensemble_example.ipynb](examples/ensemble_example.ipynb): Examples of multi-member ensembles with IFS, AIFS, and GEFS.
-- [wind_example.ipynb](examples/wind_example.ipynb): A basic wind resource forecast example using a few models, including converting the data to a format compatible with `windpowerlib`*
+- [wind_example.ipynb](examples/wind_example.ipynb): A basic wind resource forecast example using a few models, including converting the data to a format compatible with `windpowerlib`*.
+- [erbs_vs_dirindex.ipynb](examples/erbs_vs_dirindex.ipynb): A comparison of Erbs and DIRINDEX irradiance decomposition models using SURFRAD measurements.
 
 \* https://github.com/wind-python/windpowerlib/
 
