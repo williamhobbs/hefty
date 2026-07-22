@@ -825,6 +825,10 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                     FH.download(search_string_list[j])
                     ds_dict[j] = FH.xarray(search_string_list[j],
                                            remove_grib=True)
+                    # calculate wind speed from u and v components if relevant
+                    if ('uv' in search_string_list[j] or
+                            'UV' in search_string_list[j]):
+                        ds_dict[j] = ds_dict[j].herbie.with_wind('speed')
                     # merge - override avoids height conflict between 2m temp
                     # and 10m wind
                     ds = xr.merge(ds_dict.values(), compat='override')
@@ -835,6 +839,10 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                     ds_dict[j] = FH.xarray(search_string_list[j],
                                            remove_grib=True,
                                            overwrite=True)
+                    # calculate wind speed from u and v components if relevant
+                    if ('uv' in search_string_list[j] or
+                            'UV' in search_string_list[j]):
+                        ds_dict[j] = ds_dict[j].herbie.with_wind('speed')
                     # merge - override avoids height conflict between 2m temp
                     # and 10m wind
                     ds = xr.merge(ds_dict.values(), compat='override')
@@ -849,9 +857,6 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                                      f'with error: {e}')
             else:
                 break
-
-        # calculate wind speed from u and v components
-        ds = ds.herbie.with_wind('speed')
 
         if model == 'hrrr' and hrrr_coursen_window is not None:
             ds = ds.coarsen(x=hrrr_coursen_window,
