@@ -4,7 +4,7 @@ import xarray as xr
 from herbie import Herbie, FastHerbie
 import pvlib
 import time
-from hefty.utilities import model_input_formatter
+from hefty.utilities import model_input_formatter, get_fcast_df
 
 try:
     import cdsapi
@@ -118,6 +118,10 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
        <http://dx.doi.org/10.21105/joss.05994>`_
     """
 
+    if model not in {'hrrr', 'gfs', 'gefs', 'ifs', 'ifs_ens',
+                     'aifs', 'aifs_ens', 'cams'}:
+        raise ValueError(f'model="{model}" is not compatible with this'
+                         ' function.')
     # set clear sky model. could be an input variable at some point
     # model_cs = 'simplified_solis'
     model_cs_kwargs = {
@@ -150,108 +154,14 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
     # get NWP data as dataframe
     if model != 'cams':
-        delimiter = '|'
-        search_string_list = search_str.split(delimiter)
-        num_datasets = len(search_string_list)
-        if model == 'hrrr':
-            num_datasets -= 1  # DNI and GHI will show up in a single dataset
-        i = []
-        for fxx in fxx_range:
-            # get solar, 10m wind, and 2m temp data
-            # try n times based loosely on
-            # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
-            for attempts_remaining in reversed(range(attempts)):
-                attempt_num = attempts - attempts_remaining
-                try:
-                    if attempt_num == 1:
-                        # try downloading
-                        ds = Herbie(
-                            date,
-                            model=model,
-                            product=product,
-                            fxx=fxx,
-                            member=member,
-                            priority=priority
-                            ).xarray(search_str)
-                        # address GH#77
-                        if len(ds) < num_datasets:
-                            msg = ('Parameters appear to be '
-                                   'missing. Another download'
-                                   ' will be attempted if there are attempts'
-                                   ' remaining.')
-                            raise ValueError(msg)
-                        # merge - override avoids height conflict between 2m
-                        # temp and 10m wind
-                        ds = xr.merge(ds, compat='override')
-                    else:
-                        # after first attempt, set overwrite=True to overwrite
-                        # partial files
-                        ds = Herbie(
-                            date,
-                            model=model,
-                            product=product,
-                            fxx=fxx,
-                            member=member,
-                            priority=priority
-                            ).xarray(search_str, overwrite=True)
-                        # address GH#77
-                        if len(ds) < num_datasets:
-                            msg = ('Parameters appear to be '
-                                   'missing. Another download'
-                                   ' will be attempted if there are attempts'
-                                   ' remaining.')
-                            raise ValueError(msg)
-                        # merge - override avoids height conflict between 2m
-                        # temp and 10m wind
-                        ds = xr.merge(ds, compat='override')
-                except Exception as e:
-                    print(e)
-                    if attempts_remaining:
-                        print('attempt ' + str(attempt_num)
-                              + ' failed, pause for '
-                              + str((attempt_num)**2) + ' min')
-                        time.sleep(60*(attempt_num)**2)
-                    else:
-                        raise ValueError(f'download failed, ran out of '
-                                         f'attempts with error: {e}')
-                else:
-                    break
-
-            # calculate wind speed from u and v components
-            ds = ds.herbie.with_wind('speed')
-
-            if model == 'hrrr' and hrrr_coursen_window is not None:
-                ds = ds.coarsen(x=hrrr_coursen_window,
-                                y=hrrr_coursen_window,
-                                boundary='trim').mean()
-
-            # use pick_points for single point or list of points
-            i.append(
-                ds.herbie.pick_points(
-                    pd.DataFrame(
-                        {
-                            "latitude": latitude,
-                            "longitude": longitude,
-                        }
-                    )
-                )
-            )
-        ts = xr.concat(i, dim="valid_time")  # concatenate
-        # rename 'ssrd' to 'sdswrf' in ifs/aifs
-        if model == 'ifs' or model == 'aifs':
-            ts = ts.rename({'ssrd': 'sdswrf'})
-        # convert to dataframe
-        if model == 'hrrr':  # include direct, vbdsf
-            df_temp = ts.to_dataframe()[['sdswrf', 'vbdsf',
-                                         't2m', 'si10']]
-        else:
-            df_temp = ts.to_dataframe()[['sdswrf', 't2m', 'si10']]
-        # add timezone
-        df_temp = df_temp.tz_localize('UTC', level='valid_time')
-        # rename wind speed
-        df_temp = df_temp.rename(columns={'si10': 'wind_speed'})
-        # convert air temperature units
-        df_temp['temp_air'] = df_temp['t2m'] - 273.15
+        df_temp = get_fcast_df(
+            latitude, longitude, date, fxx_range, model,
+            search_str, priority, product=product,
+            fast=False, attempts=attempts,
+            resource_type='solar',
+            member=member,
+            hrrr_coursen_window=hrrr_coursen_window,
+            full_ens=False)
 
     elif model == 'cams':
         if not _has_cdsapi:
@@ -406,14 +316,19 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                         * mixed['sdswrf_prev']) / mixed['int_len'])
             df['ghi'] = unmixed
 
-        elif model in {'ifs', 'aifs', 'cams'}:
+        elif model in {'ifs', 'ifs_ens', 'aifs', 'aifs_ens', 'cams'}:
             # for ifs ghi: cumulative J/m^s to average W/m^2 over the interval
             # ending at the valid time. calculate difference in measurement
             # over diff in time to get avg J/s/m^2 = W/m^2
-            df['ghi'] = df['sdswrf'].diff() / df.index.diff().seconds.values
+            if priority == 'dynamical':
+                df['ghi'] = df['sdswrf']
+            else:
+                df['ghi'] = (df['sdswrf'].diff() /
+                             df.index.diff().seconds.values)
 
             if model == 'cams':
-                df['dni'] = df['vbdsf'].diff() / df.index.diff().seconds.values
+                df['dni'] = (df['vbdsf'].diff() /
+                             df.index.diff().seconds.values)
                 df['ghi_clear_nwp'] = (df['ssrdc'].diff() /
                                        df.index.diff().seconds.values)
                 df['direct_horiz_clear'] = (df['cdir'].diff() /
@@ -423,7 +338,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             df['ghi'] = df['sdswrf']
             df['dni'] = df['vbdsf']
 
-        if model in {'gfs', 'gefs', 'ifs', 'aifs'}:
+        if model in {'gfs', 'gefs', 'ifs', 'ifs_ens', 'aifs', 'aifs_ens'}:
             # make 1min interval clear sky data covering our time range
             times = pd.date_range(
                 start=df.index[0],
@@ -776,6 +691,10 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         <http://dx.doi.org/10.21105/joss.05994>`_
     """
 
+    if model not in {'hrrr', 'gfs', 'gefs', 'ifs', 'ifs_ens',
+                     'aifs', 'aifs_ens'}:
+        raise ValueError(f'model="{model}" is not compatible with this'
+                         ' function.')
     # set clear sky model. could be an input variable at some point
     model_cs = 'simplified_solis'
     model_cs_kwargs = {
@@ -806,95 +725,100 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
     date, fxx_range, product, search_str = model_input_formatter(
         init_date, run_length, lead_time_to_start, model)
 
-    delimiter = '|'
-    search_string_list = search_str.split(delimiter)
+    df_temp = get_fcast_df(
+        latitude, longitude, date, fxx_range, model,
+        search_str, priority, product=product,
+        fast=True, attempts=attempts,
+        resource_type='solar',
+        member=member, hrrr_coursen_window=hrrr_coursen_window,
+        full_ens=False)
 
-    i = []
-    ds_dict = {}
-    FH = FastHerbie([date], model=model, product=product, fxx=fxx_range,
-                    member=member, priority=priority)
-    for j in range(0, len(search_string_list)):
-        # get solar, 10m wind, and 2m temp data
-        # try n times based loosely on
-        # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
-        for attempts_remaining in reversed(range(attempts)):
-            attempt_num = attempts - attempts_remaining
-            try:
-                if attempt_num == 1:
-                    # try downloading
-                    FH.download(search_string_list[j])
-                    ds_dict[j] = FH.xarray(search_string_list[j],
-                                           remove_grib=True)
-                    # calculate wind speed from u and v components if relevant
-                    if ('uv' in search_string_list[j] or
-                            'UV' in search_string_list[j]):
-                        ds_dict[j] = ds_dict[j].herbie.with_wind('speed')
-                    # merge - override avoids height conflict between 2m temp
-                    # and 10m wind
-                    ds = xr.merge(ds_dict.values(), compat='override')
-                else:
-                    # after first attempt, set overwrite=True to overwrite
-                    # partial files
-                    FH.download(search_string_list[j])
-                    ds_dict[j] = FH.xarray(search_string_list[j],
-                                           remove_grib=True,
-                                           overwrite=True)
-                    # calculate wind speed from u and v components if relevant
-                    if ('uv' in search_string_list[j] or
-                            'UV' in search_string_list[j]):
-                        ds_dict[j] = ds_dict[j].herbie.with_wind('speed')
-                    # merge - override avoids height conflict between 2m temp
-                    # and 10m wind
-                    ds = xr.merge(ds_dict.values(), compat='override')
-            except Exception as e:
-                print(e)
-                if attempts_remaining:
-                    print('attempt ' + str(attempt_num) + ' failed, pause for '
-                          + str((attempt_num)**2) + ' min')
-                    time.sleep(60*(attempt_num)**2)
-                else:
-                    raise ValueError(f'download failed, ran out of attempts '
-                                     f'with error: {e}')
-            else:
-                break
+    # i = []
+    # ds_dict = {}
+    # FH = FastHerbie([date], model=model, product=product, fxx=fxx_range,
+    #                 member=member, priority=priority)
+    # for j in range(0, len(search_string_list)):
+    #     # get solar, 10m wind, and 2m temp data
+    #     # try n times based loosely on
+    #     # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
+    #     for attempts_remaining in reversed(range(attempts)):
+    #         attempt_num = attempts - attempts_remaining
+    #         try:
+    #             if attempt_num == 1:
+    #                 # try downloading
+    #                 FH.download(search_string_list[j])
+    #                 ds_dict[j] = FH.xarray(search_string_list[j],
+    #                                        remove_grib=True)
+    #                 # calculate wind speed from u and v components if relevant
+    #                 if ('uv' in search_string_list[j] or
+    #                         'UV' in search_string_list[j]):
+    #                     ds_dict[j] = ds_dict[j].herbie.with_wind('speed')
+    #                 # merge - override avoids height conflict between 2m temp
+    #                 # and 10m wind
+    #                 ds = xr.merge(ds_dict.values(), compat='override')
+    #             else:
+    #                 # after first attempt, set overwrite=True to overwrite
+    #                 # partial files
+    #                 FH.download(search_string_list[j])
+    #                 ds_dict[j] = FH.xarray(search_string_list[j],
+    #                                        remove_grib=True,
+    #                                        overwrite=True)
+    #                 # calculate wind speed from u and v components if relevant
+    #                 if ('uv' in search_string_list[j] or
+    #                         'UV' in search_string_list[j]):
+    #                     ds_dict[j] = ds_dict[j].herbie.with_wind('speed')
+    #                 # merge - override avoids height conflict between 2m temp
+    #                 # and 10m wind
+    #                 ds = xr.merge(ds_dict.values(), compat='override')
+    #         except Exception as e:
+    #             print(e)
+    #             if attempts_remaining:
+    #                 print('attempt ' + str(attempt_num) + ' failed, pause for '
+    #                       + str((attempt_num)**2) + ' min')
+    #                 time.sleep(60*(attempt_num)**2)
+    #             else:
+    #                 raise ValueError(f'download failed, ran out of attempts '
+    #                                  f'with error: {e}')
+    #         else:
+    #             break
 
-        if model == 'hrrr' and hrrr_coursen_window is not None:
-            ds = ds.coarsen(x=hrrr_coursen_window,
-                            y=hrrr_coursen_window,
-                            boundary='trim').mean()
+    #     if model == 'hrrr' and hrrr_coursen_window is not None:
+    #         ds = ds.coarsen(x=hrrr_coursen_window,
+    #                         y=hrrr_coursen_window,
+    #                         boundary='trim').mean()
 
-        # use pick_points for single point or list of points
-        i.append(
-            ds.herbie.pick_points(
-                pd.DataFrame(
-                    {
-                        "latitude": latitude,
-                        "longitude": longitude,
-                    }
-                )
-            )
-        )
-    # convert to dataframe
-    # rename 'ssrd' to 'sdswrf' in ifs/aifs
-    if model == 'ifs' or model == 'aifs':
-        df_temp = i[-1].to_dataframe()[['valid_time', 'ssrd', 't2m', 'si10']]
-        df_temp = df_temp.rename(columns={'ssrd': 'sdswrf'})
-    elif model == 'hrrr':
-        df_temp = i[-1].to_dataframe()[['valid_time', 'sdswrf', 'vbdsf',
-                                        't2m', 'si10']]
-    else:
-        df_temp = i[-1].to_dataframe()[['valid_time', 'sdswrf', 't2m', 'si10']]
+    #     # use pick_points for single point or list of points
+    #     i.append(
+    #         ds.herbie.pick_points(
+    #             pd.DataFrame(
+    #                 {
+    #                     "latitude": latitude,
+    #                     "longitude": longitude,
+    #                 }
+    #             )
+    #         )
+    #     )
+    # # convert to dataframe
+    # # rename 'ssrd' to 'sdswrf' in ifs/aifs
+    # if model == 'ifs' or model == 'aifs':
+    #     df_temp = i[-1].to_dataframe()[['valid_time', 'ssrd', 't2m', 'si10']]
+    #     df_temp = df_temp.rename(columns={'ssrd': 'sdswrf'})
+    # elif model == 'hrrr':
+    #     df_temp = i[-1].to_dataframe()[['valid_time', 'sdswrf', 'vbdsf',
+    #                                     't2m', 'si10']]
+    # else:
+    #     df_temp = i[-1].to_dataframe()[['valid_time', 'sdswrf', 't2m', 'si10']]
 
-    # make 'valid_time' an index with 'point', drop 'step'
-    df_temp = (df_temp.reset_index().set_index(['valid_time', 'point'])
-               .drop('step', axis=1))
+    # # make 'valid_time' an index with 'point', drop 'step'
+    # df_temp = (df_temp.reset_index().set_index(['valid_time', 'point'])
+    #            .drop('step', axis=1))
 
-    # add timezone
-    df_temp = df_temp.tz_localize('UTC', level='valid_time')
-    # rename wind speed
-    df_temp = df_temp.rename(columns={'si10': 'wind_speed'})
-    # convert air temperature units
-    df_temp['temp_air'] = df_temp['t2m'] - 273.15
+    # # add timezone
+    # df_temp = df_temp.tz_localize('UTC', level='valid_time')
+    # # rename wind speed
+    # df_temp = df_temp.rename(columns={'si10': 'wind_speed'})
+    # # convert air temperature units
+    # df_temp['temp_air'] = df_temp['t2m'] - 273.15
 
     # work through sites
     dfs = {}  # empty list of dataframes
@@ -935,7 +859,11 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             # for ifs ghi: cumulative J/m^s to average W/m^2 over the interval
             # ending at the valid time. calculate difference in measurement
             # over diff in time to get avg J/s/m^2 = W/m^2
-            df['ghi'] = df['sdswrf'].diff() / df.index.diff().seconds.values
+            if priority == 'dynamical':
+                df['ghi'] = df['sdswrf']
+            else:
+                df['ghi'] = (df['sdswrf'].diff() /
+                             df.index.diff().seconds.values)
 
         elif model == 'hrrr':
             df['ghi'] = df['sdswrf']

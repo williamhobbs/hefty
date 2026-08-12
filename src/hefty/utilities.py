@@ -1,6 +1,10 @@
 import pandas as pd
 import warnings
 import math
+import numpy as np
+from herbie import Herbie, FastHerbie
+import xarray as xr
+import time
 
 
 def get_fcast_definition(model='gfs'):
@@ -853,3 +857,561 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
     init_date = init_date.tz_localize(None)
 
     return init_date, fxx_range, product, search_str
+
+
+try:
+    import dynamical_catalog
+except ImportError:
+    _has_dynamical_catalog = False
+else:
+    _has_dynamical_catalog = True
+
+
+def get_fcast_df(latitude, longitude, init_date, fxx_range, model,
+                 search_str, priority, product=None,
+                 fast=False, attempts=2, resource_type='solar',
+                 member=None, full_ens=False, get_ens_temp=False,
+                 get_ens_wind=False, hrrr_coursen_window=None):
+    """
+    Function to return a dataframe of forecasted resource data.
+
+    Parameters
+    ----------
+    latitude : float or list of floats
+        Latitude in decimal degrees. Positive north of equator, negative
+        to south.
+
+    longitude : float or list of floats
+        Longitude in decimal degrees. Positive east of prime meridian,
+        negative to west.
+
+    init_date : pandas-parsable datetime
+        Model initialization datetime. Note that this should be UTC and on the
+        hour for the models currently available with hefty, and most models
+        don't initialize every hour. See
+        :py:func:`hefty.utilities.adjust_forecast_datetimes` for help
+        determining appropriate init_date values.
+
+    fxx_range : int or list of ints
+        fxx (lead time) values. Expected to come from
+        :py:func:`hefty.utilities.model_input_formatter`
+
+    model : string, default 'gfs'
+        Forecast model. Can be NOAA GFS ('gfs'), ECMWF IFS single ('ifs')
+        of ensemble ('ifs_ens'), ECMWF AIFS single ('aifs') or esnsemble
+        ('aifs_ens'), NOAA HRRR ('hrrr'), or NOAA GEFS ensemble ('gefs').
+        ECMWF CAMS ('cams') is an experimental option. It requires cdsapi
+        to be installed and a CDS API key to be passed via the
+        'cams_api_key' parameter.
+
+    search_str : string
+        wgrib2-style search string for Herbie to select variables of
+        interest.
+
+    priority : list or string
+        List of model sources to get the data in the order of download
+        priority, or string for a single source. See Herbie docs.
+        Typical values would be 'aws' or 'google'. Now includes option
+        of 'dynamical' to get data from dynamical.org. To use 'dynamical',
+        it must be a single string, not part of a list.
+
+    product : string, default None
+        Herbie product.
+
+    fast : boolean, default False
+        Use FastHerbie for herbie sources, default False
+
+    attempts : int
+        Number of attempts to try if using Herbie.
+
+    resource_type : {'solar, 'wind'}
+        Resrouce type. Default is 'solar'.
+
+    member : int or string or None, default None
+        Valid member for IFS ensemble, AIFS ensemble, or GEFS. Could be 0-51
+        for IFS/AIFS, where 0 is the control and 1-50 are perturbed members,
+        0-31 for GEFS, where 0 is control and 1-30 are perturbed members. Can
+        also be 'avg' or 'mean' (case-insensitive) to get the ensemble mean.
+
+    hrrr_coursen_window : int or None, default None
+        If model is 'hrrr', optional setting that is the x and y window size
+        for coarsening the xarray dataset, effectively applying spatial
+        smoothing to the HRRR model. The HRRR has a native resolution of
+        about 3 km, so a value of 10 results in approx. 30 x 30 km grid.
+        Does not currently work with priority='dynamical'.
+
+    Returns
+    -------
+    df_out : pandas.DataFrane
+        raw output dataframe of forecasted parameters in the native time
+        step. Requires further processing to get "proper" hourly data.
+    """
+
+    search_string_list = search_str.split('|')
+
+    use_fastherbie = False
+    use_herbie = False
+    if priority.lower() in [x.lower() for x in [
+          'aws', 'google', 'azure', 'nomads', 'ecmwf']]:
+        if fast:
+            use_fastherbie = True
+        else:
+            use_herbie = True
+        if model == 'ifs_ens':
+            model = 'ifs'
+            print('product')
+
+    if use_herbie:
+        num_datasets = len(search_string_list)
+        search_str = '|'.join(search_string_list)
+        if model == 'hrrr':
+            num_datasets -= 1  # DNI and GHI will show up in a single dataset
+        i = []
+        for fxx in fxx_range:
+            # get solar, 10m wind, and 2m temp data
+            # try n times based loosely on
+            # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
+            for attempts_remaining in reversed(range(attempts)):
+                attempt_num = attempts - attempts_remaining
+                try:
+                    if attempt_num == 1:
+                        # try downloading
+                        ds = Herbie(
+                            init_date,
+                            model=model,
+                            product=product,
+                            fxx=fxx,
+                            member=member,
+                            priority=priority
+                            ).xarray(search_str)
+                        # address GH#77
+                        if len(ds) < num_datasets:
+                            msg = ('Parameters appear to be '
+                                   'missing. Another download'
+                                   ' will be attempted if there are attempts'
+                                   ' remaining.')
+                            raise ValueError(msg)
+                        # merge - override avoids height conflict between 2m
+                        # temp and 10m wind
+                        ds = xr.merge(ds, compat='override')
+                    else:
+                        # after first attempt, set overwrite=True to overwrite
+                        # partial files
+                        ds = Herbie(
+                            init_date,
+                            model=model,
+                            product=product,
+                            fxx=fxx,
+                            member=member,
+                            priority=priority
+                            ).xarray(search_str, overwrite=True)
+                        # address GH#77
+                        if len(ds) < num_datasets:
+                            msg = ('Parameters appear to be '
+                                   'missing. Another download'
+                                   ' will be attempted if there are attempts'
+                                   ' remaining.')
+                            raise ValueError(msg)
+                        # merge - override avoids height conflict between 2m
+                        # temp and 10m wind
+                        ds = xr.merge(ds, compat='override')
+                except Exception as e:
+                    print(e)
+                    if attempts_remaining:
+                        print('attempt ' + str(attempt_num)
+                              + ' failed, pause for '
+                              + str((attempt_num)**2) + ' min')
+                        time.sleep(60*(attempt_num)**2)
+                    else:
+                        raise ValueError(f'download failed, ran out of '
+                                         f'attempts with error: {e}')
+                else:
+                    break
+
+            # calculate wind speed from u and v components
+            ds = ds.herbie.with_wind('speed')
+
+            if model == 'hrrr' and hrrr_coursen_window is not None:
+                ds = ds.coarsen(x=hrrr_coursen_window,
+                                y=hrrr_coursen_window,
+                                boundary='trim').mean()
+
+            # use pick_points for single point or list of points
+            i.append(
+                ds.herbie.pick_points(
+                    pd.DataFrame(
+                        {
+                            "latitude": latitude,
+                            "longitude": longitude,
+                        }
+                    )
+                )
+            )
+        ts = xr.concat(i, dim="valid_time")  # concatenate
+        # rename 'ssrd' to 'sdswrf' in ifs/aifs
+        if model == 'ifs' or model == 'aifs':
+            ts = ts.rename({'ssrd': 'sdswrf'})
+        # convert to dataframe
+        if model == 'hrrr':  # include direct, vbdsf
+            df_temp = ts.to_dataframe()[['sdswrf', 'vbdsf',
+                                         't2m', 'si10']]
+        else:
+            df_temp = ts.to_dataframe()[['sdswrf', 't2m', 'si10']]
+        # add timezone
+        df_temp = df_temp.tz_localize('UTC', level='valid_time')
+        # rename wind speed
+        df_temp = df_temp.rename(columns={'si10': 'wind_speed'})
+        # convert air temperature units
+        df_temp['temp_air'] = df_temp['t2m'] - 273.15
+
+    elif use_fastherbie:
+        i = []
+        ds_dict = {}
+        FH = FastHerbie([init_date], model=model, product=product,
+                        fxx=fxx_range, member=member, priority=priority)
+        for j in range(0, len(search_string_list)):
+            # get solar, 10m wind, and 2m temp data
+            # try n times based loosely on
+            # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
+            for attempts_remaining in reversed(range(attempts)):
+                attempt_num = attempts - attempts_remaining
+                try:
+                    if attempt_num == 1:
+                        # try downloading
+                        FH.download(search_string_list[j])
+                        ds_dict[j] = FH.xarray(search_string_list[j],
+                                               remove_grib=True)
+                        # calculate wind speed from u and v components if relevant
+                        if ('uv' in search_string_list[j] or
+                                'UV' in search_string_list[j]):
+                            ds_dict[j] = ds_dict[j].herbie.with_wind('speed')
+                        # merge - override avoids height conflict between 2m temp
+                        # and 10m wind
+                        ds = xr.merge(ds_dict.values(), compat='override')
+                    else:
+                        # after first attempt, set overwrite=True to overwrite
+                        # partial files
+                        FH.download(search_string_list[j])
+                        ds_dict[j] = FH.xarray(search_string_list[j],
+                                               remove_grib=True,
+                                               overwrite=True)
+                        # calculate wind speed from u and v components if relevant
+                        if ('uv' in search_string_list[j] or
+                                'UV' in search_string_list[j]):
+                            ds_dict[j] = ds_dict[j].herbie.with_wind('speed')
+                        # merge - override avoids height conflict between 2m temp
+                        # and 10m wind
+                        ds = xr.merge(ds_dict.values(), compat='override')
+                except Exception as e:
+                    print(e)
+                    if attempts_remaining:
+                        print(f'attempt {str(attempt_num)} failed, pause for '
+                              f'{str((attempt_num)**2)} min')
+                        time.sleep(60*(attempt_num)**2)
+                    else:
+                        raise ValueError(f'download failed, ran out of '
+                                         f'attempts with error: {e}')
+                else:
+                    break
+
+            if model == 'hrrr' and hrrr_coursen_window is not None:
+                ds = ds.coarsen(x=hrrr_coursen_window,
+                                y=hrrr_coursen_window,
+                                boundary='trim').mean()
+
+            # use pick_points for single point or list of points
+            i.append(
+                ds.herbie.pick_points(
+                    pd.DataFrame(
+                        {
+                            "latitude": latitude,
+                            "longitude": longitude,
+                        }
+                    )
+                )
+            )
+        # convert to dataframe
+        # rename 'ssrd' to 'sdswrf' in ifs/aifs
+        if model == 'ifs' or model == 'aifs':
+            df_temp = i[-1].to_dataframe()[['valid_time', 'ssrd',
+                                            't2m', 'si10']]
+            df_temp = df_temp.rename(columns={'ssrd': 'sdswrf'})
+        elif model == 'hrrr':
+            df_temp = i[-1].to_dataframe()[['valid_time', 'sdswrf', 'vbdsf',
+                                            't2m', 'si10']]
+        else:
+            df_temp = i[-1].to_dataframe()[['valid_time', 'sdswrf',
+                                            't2m', 'si10']]
+
+        # make 'valid_time' an index with 'point', drop 'step'
+        df_temp = (df_temp.reset_index().set_index(['valid_time', 'point'])
+                   .drop('step', axis=1))
+
+        # add timezone
+        df_temp = df_temp.tz_localize('UTC', level='valid_time')
+        # rename wind speed
+        df_temp = df_temp.rename(columns={'si10': 'wind_speed'})
+        # convert air temperature units
+        df_temp['temp_air'] = df_temp['t2m'] - 273.15
+    elif priority == 'dynamical':
+        if not _has_dynamical_catalog:
+            raise ImportError((
+                "`dynamical_catalog` is required to use priority='dynamical'."
+                " Please install it, e.g., with `pip install "
+                "dynamical_catalog`."))
+        if hrrr_coursen_window is not None:
+            raise ValueError(
+                "hrrr_coursen_window option is not"
+                " currently available with priority='dynamical'")
+        ifs_single = False
+        if model == 'hrrr':
+            if pd.Timestamp(init_date).hour in {0, 6, 12, 18}:
+                dataset_id = 'noaa-hrrr-forecast-48-hour'
+            else:
+                print('accessing dynamical.org HRRR 18h *virtual* -'
+                      ' this will be slower than the HRRR 48h.')
+                dataset_id = 'noaa-hrrr-forecast-18-hour-virtual'
+        elif model == 'gfs':
+            dataset_id = 'noaa-gfs-forecast'
+        elif model == 'gefs':
+            if pd.Timestamp(init_date).hour != 0:
+                raise ValueError('gefs is only available from '
+                                 'dynamical.org for 00Z cycles')
+            else:
+                dataset_id = 'noaa-gefs-forecast-35-day'
+        elif model in {'ifs', 'ifs_ens'}:
+            if pd.Timestamp(init_date).hour != 0:
+                raise ValueError('ifs/ifs_ens is only available from'
+                                 'dynamical.org for 00Z cycles')
+            else:
+                dataset_id = 'ecmwf-ifs-ens-forecast-15-day-0-25-degree'
+                if model == 'ifs':
+                    ifs_single = True
+        elif model == 'aifs':
+            dataset_id = 'ecmwf-aifs-single-forecast'
+        elif model == 'aifs_ens':
+            dataset_id = 'ecmwf-aifs-ens-forecast'
+
+        # adjust 'member' if needed
+        # if ifs_single, or if model is an ensemble and a member is provided
+        if ifs_single or (member is not None):
+            if ifs_single:
+                member = 0
+                model = 'ifs_ens'  # change to ifs_ens, as dynamical doesn't have ifs single
+            if isinstance(member, str) and (member.lower() in
+                                            [x.lower() for x in
+                                             ['avg', 'mean']]):
+                member = 'mean'
+            elif isinstance(member, str):
+                member = int(''.join(filter(str.isdigit, member)))
+
+        # translate Herbie search strings from model_input_formatter to lists of dynamical catalog variables
+        mapping_in = {
+            'DSWRF': ['downward_short_wave_radiation_flux_surface'],  # NOAA GHI
+            'VBDSF': ['visible_beam_downward_solar_flux_surface'],  # NOAA HRRR DNI
+            ':TMP:2 m above': ['temperature_2m'],  # NOAA 2m temp
+            '[UV]GRD:10 m above': ['wind_u_10m', 'wind_v_10m'],  # NOAA 10m wind
+            'ssrd': ['downward_short_wave_radiation_flux_surface'],  # IFS/AIFS GHI
+            ':ssrd': ['downward_short_wave_radiation_flux_surface'],  # IFS/AIFS GHI, with the leading ":"
+            '2t:sfc': ['temperature_2m'],  # IFS/AIFS 2m temp
+            ':2t:sfc': ['temperature_2m'],  # IFS/AIFS 2m temp, with the leading ":"
+            '10[uv]': ['wind_u_10m', 'wind_v_10m'],  # IFS/AIFS 10m wind
+            ':10[uv]': ['wind_u_10m', 'wind_v_10m'],  # IFS/AIFS 10m wind, with the leading ":"
+            '[UV]GRD:80 m above': ['wind_u_80m', 'wind_v_80m'],  # GFS/GEFS
+            '[UV]GRD:100 m above': ['wind_u_100m', 'wind_v_100m'],  # GFS/GEFS
+            'PRES:surface': ['pressure_surface'],  # GFS
+            ':TMP:80 m above': ['temperature_80m'],  # GFS/GEFS
+            'PRES:80 m above': ['pressure_80m'],  # GFS/GEFS
+            ':100[uv]': ['wind_u_100m', 'wind_v_100m'],  # IFS/AIFS
+            ':sp:': ['pressure_surface'],  # IFS/AIFS
+        }
+
+        # TODO: mapping out needs to change depending on resource_type
+        if resource_type == 'solar':
+            # map dynamical:internal hefty variable names
+            mapping_out = {
+                'downward_short_wave_radiation_flux_surface': 'sdswrf',
+                'visible_beam_downward_solar_flux_surface': 'vbdsf',
+                'temperature_2m': 'temp_air',
+                'wind_speed_10m': 'wind_speed',
+                'ensemble_member': 'number',  # hefty uses "number" to indicate ensemble member
+            }
+        elif resource_type == 'wind':
+            # map dynamical:internal hefty variable names
+            mapping_out = {
+                'wind_speed_10m': 'wind_speed_10m',
+                'wind_speed_80m': 'wind_speed_80m',
+                'wind_speed_100m': 'wind_speed_100m',
+                'wind_direction_10m': 'wind_direction_10m',
+                'wind_direction_80m': 'wind_direction_80m',
+                'wind_direction_100m': 'wind_direction_100m',
+                'temperature_2m': 'temp_air_2m',
+                'temperature_80m': 'temp_air_80m',
+                'pressure_surface': 'pressure_0m',
+                'pressure_80m': 'pressure_80m',
+                'ensemble_member': 'number',  # hefty uses "number" to indicate ensemble member
+            }
+
+        # dynamical variables list
+        # replace each search string value with a list of dynamical variables
+        list1 = [mapping_in.get(a, a) for a in search_string_list]
+        # flatten list of lists
+        dynamical_var_list = [s for list1 in list1 for s in list1]
+
+        # make a locations dataset
+        locations = (pd.DataFrame({
+            'latitude': latitude,
+            'longitude': longitude
+            }).reset_index().rename(columns={'index': 'point'})
+            .set_index('point'))
+        locations_ds = locations[["latitude", "longitude"]].to_xarray()
+
+        # open dataset
+        ds = dynamical_catalog.open(dataset_id=dataset_id, chunks=None)
+
+        # hrrr requires custom coordinates transform
+        if dataset_id in {'noaa-hrrr-forecast-48-hour',
+                          'noaa-hrrr-forecast-18-hour-virtual'}:
+            # from
+            # https://mesowest.utah.edu/html/hrrr/zarr_documentation/html/ex_python_plot_zarr.html
+            import cartopy.crs as ccrs
+            # projection = ccrs.LambertConformal(central_longitude=262.5,
+            #                        central_latitude=38.5,
+            #                        standard_parallels=(38.5, 38.5),
+            #                         globe=ccrs.Globe(semimajor_axis=6371229,
+            #                                          semiminor_axis=6371229))
+            # xyz = projection.transform_points(src_crs=ccrs.PlateCarree(),
+            #                                   x=locations["longitude"],
+            #                                   y=locations["latitude"])
+            # locations['x'], locations['y'], _ = map(list, zip(*xyz))
+            # locations_ds = locations[['x', 'y']].to_xarray()
+
+            # similar to mesowest.utah.edu example,
+            # but from
+            # https://github.com/dynamical-org/notebooks/blob/main/noaa-hrrr-forecast-18-hour-virtual.ipynb
+            crs = ds.spatial_ref.attrs
+            hrrr_proj = ccrs.LambertConformal(
+                central_longitude=crs["longitude_of_central_meridian"],
+                central_latitude=crs["latitude_of_projection_origin"],
+                standard_parallels=crs["standard_parallel"],
+                globe=ccrs.Globe(
+                    semimajor_axis=crs["semi_major_axis"],
+                    semiminor_axis=crs["semi_minor_axis"],
+                ),
+            )
+            xyz = hrrr_proj.transform_points(src_crs=ccrs.PlateCarree(),
+                                             x=locations["longitude"],
+                                             y=locations["latitude"])
+            locations['x'], locations['y'], _ = map(list, zip(*xyz))
+            locations_ds = locations[['x', 'y']].to_xarray()
+
+            # get dataarray
+            da = (
+                ds[dynamical_var_list]
+                .sel(init_time=pd.Timestamp(init_date))
+                .sel(x=locations_ds.x,
+                     y=locations_ds.y,
+                     method="nearest")
+                .sel(lead_time=slice(pd.Timedelta(hours=min(fxx_range)),
+                                     pd.Timedelta(hours=max(fxx_range))))
+                .load()
+            )           
+        else:
+            locations_ds = locations[["latitude", "longitude"]].to_xarray()
+            if (model in {'gefs', 'ifs_ens', 'aifs_ens'} and
+                    isinstance(member, int)):
+                # get dataarray, only the specified member
+                da = (
+                    ds[dynamical_var_list]
+                    .sel(init_time=pd.Timestamp(init_date))
+                    .sel(latitude=locations_ds.latitude,
+                         longitude=locations_ds.longitude,
+                         method="nearest")
+                    .sel(lead_time=slice(pd.Timedelta(hours=min(fxx_range)),
+                                         pd.Timedelta(hours=max(fxx_range))))
+                    .sel(ensemble_member=member)
+                    .load()
+                )
+            elif ((model in {'gefs', 'ifs_ens', 'aifs_ens'}) and
+                  (member == 'mean')):
+                da = (
+                    ds[dynamical_var_list]
+                    .sel(init_time=pd.Timestamp(init_date))
+                    .sel(latitude=locations_ds.latitude,
+                         longitude=locations_ds.longitude,
+                         method="nearest")
+                    .sel(lead_time=slice(pd.Timedelta(hours=min(fxx_range)),
+                                         pd.Timedelta(hours=max(fxx_range))))
+                    .mean(dim='ensemble_member')
+                    .load()
+                )
+                da['number'] = 'mean'
+            else:
+                # get dataarray
+                da = (
+                    ds[dynamical_var_list]
+                    .sel(init_time=pd.Timestamp(init_date))
+                    .sel(latitude=locations_ds.latitude,
+                         longitude=locations_ds.longitude,
+                         method="nearest")
+                    .sel(lead_time=slice(pd.Timedelta(hours=min(fxx_range)),
+                                         pd.Timedelta(hours=max(fxx_range))))
+                    .load()
+                )
+
+        # convert to dataframe
+        df = da.to_dataframe().reset_index().set_index('valid_time')
+
+        # calculate wind speed and direction
+        if 'wind_u_10m' in df.columns:
+            df['wind_speed_10m'] = np.sqrt(df['wind_u_10m']**2 +
+                                           df['wind_v_10m']**2)
+            df['wind_direction_10m'] = (
+                    (270 - np.rad2deg(
+                        np.arctan2(df['wind_u_10m'],
+                                   df['wind_v_10m']))) % 360
+            )
+        if 'wind_u_80m' in df.columns:
+            df['wind_speed_80m'] = np.sqrt(df['wind_u_80m']**2 +
+                                           df['wind_v_80m']**2)
+            df['wind_direction_80m'] = (
+                    (270 - np.rad2deg(
+                        np.arctan2(df['wind_u_80m'],
+                                   df['wind_v_80m']))) % 360
+            )
+        if 'wind_u_100m' in df.columns:
+            df['wind_speed_100m'] = np.sqrt(df['wind_u_100m']**2 +
+                                            df['wind_v_100m']**2)
+            df['wind_direction_100m'] = (
+                    (270 - np.rad2deg(
+                        np.arctan2(df['wind_u_100m'],
+                                   df['wind_v_100m']))) % 360
+            )
+
+        # convert temperature units to celsius
+        # dynamical.org temperatures are already in celsius...
+        # if 'temperature_2m' in df.columns:
+        #     df['temperature_2m'] = df['temperature_2m'] - 273.15
+        # if 'temperature_80m' in df.columns:
+        #     df['temperature_80m'] = df['temperature_80m'] - 273.15
+
+        # rename columns to hefty-friendly variable names
+        df = df.rename(columns=mapping_out)
+
+        # add timezone
+        df = df.tz_localize('UTC', level='valid_time')
+
+        # make index valid_time and point
+        df = df.reset_index().set_index(['valid_time', 'point'])
+
+        # calculate lead time in hours
+        df['lead_time'] = df['lead_time'].dt.total_seconds() / 3600
+
+        # filter to columns of interest
+        keep_cols = (list(mapping_out.values()) +
+                     ['lead_time', 'latitude', 'longitude'])
+        df_temp = df[df.columns.intersection(keep_cols)]
+
+        # if full_ens == False:
+
+    return df_temp
