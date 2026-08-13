@@ -285,15 +285,16 @@ def get_fcast_definition(model='gfs'):
     # Implemented 2020-09-23 (https://www.emc.ncep.noaa.gov/emc/pages/numerical_forecast_systems/gefs.php)
     fcast_sched_dict_gefs = {
         'start_date': ['2020-09-24 01:00',
+                       '2020-09-24 00:00',
                        '2020-09-24 00:00'],
-        'start_hour': [0, 390],
-        'end_hour': [384, 840],
-        'interval': [3, 6],
-        'first_cycle': [0, 0],
-        'update_period': [6, 24],
-        'delay_intercept': [235, 265],
-        'delay_slope': [0.429, 0.332],
-        'product': ['3-hourly', 'extended'],  # needs update
+        'start_hour': [0, 246, 390],
+        'end_hour': [240, 384, 840],
+        'interval': [3, 6, 6],
+        'first_cycle': [0, 0, 0],
+        'update_period': [6, 0, 24],
+        'delay_intercept': [235, 235, 20.5*60],  # extended is an est.
+        'delay_slope': [0.429, 0.429, 0.429],
+        'product': ['3-hourly', '6-hourly', 'extended'],  # needs update
     }
 
     fcast_definition_gefs = {
@@ -648,7 +649,7 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
     elif model == 'gefs':
         # GEFS:
         # 0.5 deg:
-        #   0 to 384 by 3, 390 to 840 by 6 for 00z cycle only
+        #   0 to 240 by 3, 246 to 840 by 6 for 00z cycle only
         # 0.25 deg:
         #   0 to 240 by 3
         # runs every 6 hours starting at 00z
@@ -694,6 +695,16 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
 
         # set forecast lead times
         fxx_range = range(lead_time_to_start, fxx_max + 1, 3)
+        if lead_time_to_start <= 240 and fxx_max > 240:
+            fxx_max = round(fxx_max/6)*6
+            fxx_range = [*range(lead_time_to_start, 240+3, 3),
+                         *range(246, fxx_max + 1, 6)]
+        elif lead_time_to_start > 240:
+            fxx_max = round(fxx_max/6)*6
+            lead_time_to_start = round(lead_time_to_start/6)*6
+            fxx_range = range(lead_time_to_start, fxx_max + 1, 6)
+        else:
+            fxx_range = range(lead_time_to_start, fxx_max + 1, 3)
 
     elif model == 'ifs' or model == 'ifs_ens':
         # From https://www.ecmwf.int/en/forecasts/datasets/open-data
