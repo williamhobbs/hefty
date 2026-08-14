@@ -70,32 +70,24 @@ def get_fcast_definition(model='gfs'):
         'interval': [3, 6, 3],
         'first_cycle': [0, 0, 6],
         'update_period': [12, 12, 12],
-        'delay_intercept': [515, 515, 450],
-        'delay_slope': [0.006, 0.006, 0.006],
+        'delay_intercept': [515, 515, 448],
+        'delay_slope': [0.005, 0.002, 0.006],
         'product': ['oper', 'oper', 'scda'],
     }
 
     # Nov 2024 extended 'oper' and 'scda' horizons
     # https://github.com/blaylockbk/Herbie/discussions/421
     fcast_sched_dict_ifs_2 = {
+        **fcast_sched_dict_ifs_1,
         'start_date': ['2024-11-12 12:00',
                        '2024-11-12 12:00',
                        '2024-11-12 06:00'],
-        'start_hour': [0, 150, 0],
         'end_hour': [144, 360, 144],
-        'interval': [3, 6, 3],
-        'first_cycle': [0, 0, 6],
-        'update_period': [12, 12, 12],
-        'delay_intercept': [515, 515, 450],
-        'delay_slope': [0.006, 0.006, 0.006],
-        'product': ['oper', 'oper', 'scda'],
     }
 
-    # Approx Oct 1 2025, removed 1hr extra delay in releasing files
-    # Start date is just a guess, needs confirmation. Descriptoin changed
-    # sometime between Nov 6 [1] and Nov 22 [2] 2025, but the changes to the
-    # ECMWF open data website are often delayed. Maybe it corresponded with
-    # this press release [3]?
+    # Oct 1 2025, removed 1hr extra delay in releasing files. Date confirmed.
+    # Description changed sometime between Nov 6 [1] and Nov 22 [2] 2025.
+    # It corresponded with this press release [3].
     #
     # [1] https://web.archive.org/web/20251106132450/https://www.ecmwf.int/en/forecasts/datasets/open-data
     # [2] https://web.archive.org/web/20251122204201/https://www.ecmwf.int/en/forecasts/datasets/open-data
@@ -105,7 +97,8 @@ def get_fcast_definition(model='gfs'):
         'start_date': ['2025-10-01 12:00',
                        '2025-10-01 12:00',
                        '2025-10-01 06:00'],
-        'delay_intercept': [455, 455, 390],
+        'delay_intercept': [455, 455, 388],
+        'delay_slope': [0.003, 0.002, 0.006],
     }
 
     fcast_definition_ifs = {
@@ -135,8 +128,8 @@ def get_fcast_definition(model='gfs'):
         'interval': [3, 6, 3],
         'first_cycle': [0, 0, 6],
         'update_period': [12, 12, 12],
-        'delay_intercept': [520, 520, 484],
-        'delay_slope': [0.02, 0.02, 0.03],
+        'delay_intercept': [515, 515, 448],
+        'delay_slope': [0.003, 0.002, 0.006],
         'product': ['enfo', 'enfo', 'enfo'],
     }
 
@@ -154,7 +147,7 @@ def get_fcast_definition(model='gfs'):
         'start_date': ['2025-10-01 12:00',
                        '2025-10-01 12:00',
                        '2025-10-01 06:00'],
-        'delay_intercept': [460, 460, 424],
+        'delay_intercept': [455, 455, 388],
     }
 
     fcast_definition_ifs_ens = {
@@ -174,8 +167,8 @@ def get_fcast_definition(model='gfs'):
         'interval': [6],
         'first_cycle': [0],
         'update_period': [6],
-        'delay_intercept': [339],
-        'delay_slope': [0.008],
+        'delay_intercept': [370],
+        'delay_slope': [0.003],
         'product': ['aifs'],
     }
 
@@ -188,8 +181,6 @@ def get_fcast_definition(model='gfs'):
     # AIFS ENS
     # First available 2025-07-2, added one day, as I seem to recall some
     # variables were missing for a few days (https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html)
-    # Schedule is unverified, based on
-    # https://confluence.ecmwf.int/display/DAC/Dissemination+schedule
     fcast_sched_dict_aifs_ens = {
         'start_date': ['2025-07-03 00:00'],
         'start_hour': [0, 0],
@@ -197,8 +188,8 @@ def get_fcast_definition(model='gfs'):
         'interval': [6, 6],
         'first_cycle': [0, 6],
         'update_period': [12, 12],
-        'delay_intercept': [400, 400],
-        'delay_slope': [0.125, 0.125],
+        'delay_intercept': [380, 380],
+        'delay_slope': [0.06, 0.06],
         'product': ['enfo', 'enfo'],
     }
 
@@ -240,8 +231,8 @@ def get_fcast_definition(model='gfs'):
         'interval': [1, 1],
         'first_cycle': [0, 0],
         'update_period': [1, 6],
-        'delay_intercept': [61, 63],
-        'delay_slope': [1.862, 1.125],
+        'delay_intercept': [61, 65],
+        'delay_slope': [1.86, 1.126],
         'product': ['18h', '48h'],
     }
 
@@ -267,8 +258,8 @@ def get_fcast_definition(model='gfs'):
         'interval': [1, 3],
         'first_cycle': [0, 0],
         'update_period': [6, 6],
-        'delay_intercept': [238, 238],
-        'delay_slope': [0.263, 0.263],
+        'delay_intercept': [235, 235],
+        'delay_slope': [0.262, 0.262],
         'product': ['pgrb2.0p25', 'pgrb2.0p25'],
     }
 
@@ -292,8 +283,8 @@ def get_fcast_definition(model='gfs'):
         'interval': [3, 6, 6],
         'first_cycle': [0, 0, 0],
         'update_period': [6, 0, 24],
-        'delay_intercept': [235, 235, 20.5*60],  # extended is an est.
-        'delay_slope': [0.429, 0.429, 0.429],
+        'delay_intercept': [245, 250, 1435],  # 6h, extended are set manually
+        'delay_slope': [0.434, 0.43, 0.335],
         'product': ['3-hourly', '6-hourly', 'extended'],  # needs update
     }
 
