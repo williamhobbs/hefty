@@ -284,7 +284,7 @@ def get_fcast_definition(model='gfs'):
         'end_hour': [240, 384, 840],
         'interval': [3, 6, 6],
         'first_cycle': [0, 0, 0],
-        'update_period': [6, 0, 24],
+        'update_period': [6, 6, 24],
         'delay_intercept': [245, 250, 1435],  # 6h, extended are set manually
         'delay_slope': [0.434, 0.43, 0.335],
         'product': ['3-hourly', '6-hourly', 'extended'],  # needs update
