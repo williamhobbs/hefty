@@ -24,8 +24,10 @@ def get_fcast_definition(model='gfs'):
 
     Notes
     -----
-    ``delay_intercept`` and ``delay_slope`` values are based on this gist,
-    https://gist.github.com/williamhobbs/9585ff5d1248ab5de4d9e8665d7c8ea6,
+    ``delay_intercept`` and ``delay_slope`` values are based on this notebook,
+    https://github.com/williamhobbs/hefty/blob/main/docs/forecast_model_delays.ipynb,
+    also available as a markdown file,
+    https://github.com/williamhobbs/hefty/blob/main/docs/forecast_model_delays.md,
     and https://dynamical.org/status/, along with
     https://confluence.ecmwf.int/display/DAC/Dissemination+schedule and 
     https://confluence.ecmwf.int/display/CKB/CAMS%3A+Global+atmospheric+composition+forecast+data+documentation#heading-DataavailabilityHHMM.
@@ -47,7 +49,7 @@ def get_fcast_definition(model='gfs'):
     - ``'update_period'``: number of hours between cycles for the schdeule,
     e.g., ``12`` for 12 hour updates.
     - ``'delay_intercept'``: intercept of a fit between forecast delivery
-    delay in minutes and the forecast hour, e.g., ``515`` minutes. 
+    delay in minutes and the forecast hour, e.g., ``515`` minutes.
     - ``'delay_slope'``: slope of a fit between forecast delivery delay in
     minutes and the forecast hour, e.g., ``0.02`` for a model schedule that
     delivers one  forecast hours per 0.02 minues (50 hours per minute).
