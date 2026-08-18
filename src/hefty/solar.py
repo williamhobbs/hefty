@@ -4,7 +4,7 @@ import xarray as xr
 from herbie import Herbie, FastHerbie
 import pvlib
 import time
-from hefty.utilities import model_input_formatter, get_fcast_df
+from hefty.utilities import model_input_formatter, get_fcast_dataframe
 
 try:
     import cdsapi
@@ -154,7 +154,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
     # get NWP data as dataframe
     if model != 'cams':
-        df_temp = get_fcast_df(
+        df_temp = get_fcast_dataframe(
             latitude, longitude, date, fxx_range, model,
             search_str, priority, product=product,
             fast=False, attempts=attempts,
@@ -725,7 +725,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
     date, fxx_range, product, search_str = model_input_formatter(
         init_date, run_length, lead_time_to_start, model)
 
-    df_temp = get_fcast_df(
+    df_temp = get_fcast_dataframe(
         latitude, longitude, date, fxx_range, model,
         search_str, priority, product=product,
         fast=True, attempts=attempts,

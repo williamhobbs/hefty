@@ -867,11 +867,12 @@ else:
     _has_dynamical_catalog = True
 
 
-def get_fcast_df(latitude, longitude, init_date, fxx_range, model,
-                 search_str, priority, product=None,
-                 fast=False, attempts=2, resource_type='solar',
-                 member=None, full_ens=False, get_ens_temp=False,
-                 get_ens_wind=False, hrrr_coursen_window=None):
+def get_fcast_dataframe(
+        latitude, longitude, init_date, fxx_range, model,
+        search_str, priority, product=None,
+        fast=False, attempts=2, resource_type='solar',
+        member=None, full_ens=False, get_ens_temp=False,
+        get_ens_wind=False, hrrr_coursen_window=None):
     """
     Function to return a dataframe of forecasted resource data.
 
@@ -932,6 +933,23 @@ def get_fcast_df(latitude, longitude, init_date, fxx_range, model,
         for IFS/AIFS, where 0 is the control and 1-50 are perturbed members,
         0-31 for GEFS, where 0 is control and 1-30 are perturbed members. Can
         also be 'avg' or 'mean' (case-insensitive) to get the ensemble mean.
+
+    full_ens : bool, default False
+        Whether to get the full ensemble (all members) for ensemble models.
+        ``member`` needs to be ``None`` if ``full_ens`` is ``True``.  
+
+    get_ens_temp : bool, default False
+        Get air temperature from each ensemble member if `True`. Otherwise,
+        if `False` (default), get air temperature from the control member and
+        use it for all forecasts. Setting to `True` approximately doubles the
+        amount of data and the time needed to download and process it. Must
+        be `True` if `get_ens_wind` is `True`. ``member`` needs to be ``None``
+        if ``get_ens_temp`` is ``True``.
+
+    get_ens_wind : bool, default False
+        Get wind speed from each ensemble member if `True`. Otherwise, if
+        `False` (default), wind speed is a generic 2 m/s value to save time.
+        ``member`` needs to be ``None`` if ``get_ens_wind`` is ``True``.
 
     hrrr_coursen_window : int or None, default None
         If model is 'hrrr', optional setting that is the x and y window size
