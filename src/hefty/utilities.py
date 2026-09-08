@@ -1032,6 +1032,7 @@ def _herbie_downloader(latitude, longitude, init_date, resource_type,
 
 try:
     import dynamical_catalog
+    import cartopy
 except ImportError:
     _has_dynamical_catalog = False
 else:
@@ -1317,9 +1318,9 @@ def get_fcast_dataframe(
     elif priority == 'dynamical':
         if not _has_dynamical_catalog:
             raise ImportError((
-                "`dynamical_catalog` is required to use priority='dynamical'."
-                " Please install it, e.g., with `pip install "
-                "dynamical_catalog`."))
+                "`dynamical_catalog` and `cartopy` are required to use "
+                "priority='dynamical'. Please install these, e.g., with "
+                "`pip install dynamical_catalog cartopy`."))
         if hrrr_coursen_window is not None:
             raise ValueError(
                 "hrrr_coursen_window option is not"
