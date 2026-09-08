@@ -172,7 +172,8 @@ def get_fcast_definition(model='gfs'):
     }
 
     # AIFS
-    # First available 2024-02-01 (https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html)
+    # First available 2024-02-01
+    # (https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html)
     fcast_sched_dict_aifs = {
         'start_date': ['2024-02-01 00:00'],
         'start_hour': [0],
@@ -193,7 +194,8 @@ def get_fcast_definition(model='gfs'):
 
     # AIFS ENS
     # First available 2025-07-2, added one day, as I seem to recall some
-    # variables were missing for a few days (https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html)
+    # variables were missing for a few days
+    # (https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html)
     # Schedule is unverified, based on
     # https://confluence.ecmwf.int/display/DAC/Dissemination+schedule
     fcast_sched_dict_aifs_ens = {
@@ -287,8 +289,10 @@ def get_fcast_definition(model='gfs'):
     # GEFS
     # Need to use GEFSv12 and newer to correspond to GFSv15.1 and newer (see
     # comments on GFS above).
-    # GEFSv12 is based on GFSv15.1 (https://journals.ametsoc.org/view/journals/mwre/150/3/MWR-D-21-0245.1.xml)
-    # Implemented 2020-09-23 (https://www.emc.ncep.noaa.gov/emc/pages/numerical_forecast_systems/gefs.php)
+    # GEFSv12 is based on GFSv15.1
+    # (https://journals.ametsoc.org/view/journals/mwre/150/3/MWR-D-21-0245.1.xml)
+    # Implemented 2020-09-23
+    # (https://www.emc.ncep.noaa.gov/emc/pages/numerical_forecast_systems/gefs.php)
     fcast_sched_dict_gefs = {
         'start_date': ['2020-09-24 01:00',
                        '2020-09-24 00:00'],
@@ -737,6 +741,9 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
                 elif get_ens_temp and get_ens_wind:
                     search_str = 'DSWRF|:TMP:2 m above|[UV]GRD:10 m above'
             else:
+                # needs to be ordered "ghi|temp_air|wind_speed" to work with
+                # get_solar_forecast_ensemble with get_ens_temp=False,
+                # get_ens_wind=False
                 search_str = 'DSWRF|:TMP:2 m above|[UV]GRD:10 m above'
         elif resource_type == 'wind':
             # 2m temp and 10m wind are in pgrb2a, but 80 and 100m are in
@@ -790,7 +797,8 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
 
         # Herbie inputs
         # scda goes away/went away 2026-05-12
-        # see https://confluence.ecmwf.int/display/FCST/Implementation+of+IFS+Cycle+50r1
+        # see
+        # https://confluence.ecmwf.int/display/FCST/Implementation+of+IFS+Cycle+50r1
         if model == 'ifs':
             if (init_date.tz_localize(None) <
                 pd.to_datetime('2026-05-12 06:00') and
@@ -852,6 +860,9 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
             # not full ensemble, member is specified, doesn't require ifs oper
             elif not full_ens and product == 'enfo':
                 if member == 0 or member == '0':
+                    # needs to be ordered "ghi|temp_air|wind_speed" to work
+                    # with get_solar_forecast_ensemble w/ get_ens_temp=False,
+                    # get_ens_wind=False
                     search_str = (':ssrd:sfc:g|:2t:sfc:g|:10[uv]:sfc:g')
                 else:
                     search_str = (
@@ -877,7 +888,8 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         fxx_range = range(lead_time_to_start, fxx_max + 1, 1)
 
     elif model == 'cams':
-        # From https://confluence.ecmwf.int/display/CKB/CAMS%3A+Global+atmospheric+composition+forecast+data+documentation
+        # From
+        # https://confluence.ecmwf.int/display/CKB/CAMS%3A+Global+atmospheric+composition+forecast+data+documentation
         # Runs 00z and 12z, 0-120h by 1h for single-level parameters
         # 00 UTC data available by 10:00 UTC
         # 12 UTC data available by 22:00 UTC
@@ -970,10 +982,12 @@ def _herbie_downloader(latitude, longitude, init_date, resource_type,
     num_datasets = len(search_string_list)
     if resource_type == 'solar':
         if model == 'hrrr':
-            num_datasets -= 1  # DNI and GHI will show up in a single dataset
+            # DNI and GHI will show up in a single dataset
+            num_datasets -= 1
     if resource_type == 'wind':
         if model in ['gfs', 'gefs']:
-            num_datasets -= 2  # 100 and 80 m wind; 80m t and p; show up in single datasets
+            # 100 and 80 m wind; 80m t and p; show up in single datasets
+            num_datasets -= 2
     # try downloading
     ds = Herbie(
         init_date,
@@ -1078,7 +1092,9 @@ def get_fcast_dataframe(
 
     search_str : string
         wgrib2-style search string for Herbie to select variables of
-        interest.
+        interest. For priority = 'dynamical', the search string will be
+        converted to dynamical.org variable names with the hardcoded
+        'mapping_in' dictionary in this function.
 
     priority : list or string, default None
         List of model sources to get the data in the order of download
