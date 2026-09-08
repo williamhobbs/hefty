@@ -800,14 +800,14 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
             else:
                 product = 'oper'
             if resource_type == 'solar':
-                search_str = ':ssrd|:10[uv]|:2t'
+                search_str = ':ssrd|:2t|:10[uv]'
             elif resource_type == 'wind':
                 search_str = ':10[uv]|:100[uv]|:2t|:sp'
 
         elif model == 'aifs':
             product = 'oper'  # deterministic
             if resource_type == 'solar':
-                search_str = ':ssrd|:10[uv]|:2t'
+                search_str = ':ssrd|:2t|:10[uv]'
             elif resource_type == 'wind':
                 search_str = ':10[uv]|:100[uv]|:2t|:sp'
 
@@ -860,7 +860,7 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
                     )
 
             elif not full_ens and (product == 'oper' or model == 'aifs_ens'):
-                search_str = ':ssrd|:10[uv]|:2t'
+                search_str = ':ssrd|:2t|:10[uv]'
 
     elif model == 'hrrr':
 
