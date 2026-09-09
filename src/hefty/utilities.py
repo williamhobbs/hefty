@@ -28,8 +28,8 @@ def get_fcast_definition(model='gfs'):
 
     Notes
     -----
-    ``delay_intercept`` and ``delay_slope`` values are based on this gist,
-    https://gist.github.com/williamhobbs/9585ff5d1248ab5de4d9e8665d7c8ea6,
+    ``delay_intercept`` and ``delay_slope`` values are based on this notebook,
+    https://github.com/williamhobbs/hefty/blob/main/docs/forecast_model_delays.ipynb,
     also available as a markdown file,
     https://github.com/williamhobbs/hefty/blob/main/docs/forecast_model_delays.md,
     and https://dynamical.org/status/, along with
