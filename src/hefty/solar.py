@@ -344,8 +344,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         if model in {'gfs', 'gefs', 'ifs', 'ifs_ens', 'aifs', 'aifs_ens'}:
             # make 1min interval clear sky data covering our time range
             times = pd.date_range(
-                start=df.index[0],
-                end=df.index[-1],
+                start=df.index[0]+pd.Timedelta('30s'),
+                end=df.index[-1]-pd.Timedelta('30s'),
                 freq='1min',
                 tz='UTC')
 
@@ -516,8 +516,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
                 # make 1min interval clear sky data covering our time range
                 times = pd.date_range(
-                    start=df.index[0],
-                    end=df.index[-1],
+                    start=df.index[0]+pd.Timedelta('30s'),
+                    end=df.index[-1]-pd.Timedelta('30s'),
                     freq='1min',
                     tz='UTC')
 
@@ -781,8 +781,8 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         if model in {'gfs', 'gefs', 'ifs', 'ifs_ens', 'aifs', 'aifs_ens'}:
             # make 1min interval clear sky data covering our time range
             times = pd.date_range(
-                start=df.index[0],
-                end=df.index[-1],
+                start=df.index[0]+pd.Timedelta('30s'),
+                end=df.index[-1]-pd.Timedelta('30s'),
                 freq='1min',
                 tz='UTC')
 
@@ -906,8 +906,8 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
 
                 # make 1min interval clear sky data covering our time range
                 times = pd.date_range(
-                    start=df.index[0],
-                    end=df.index[-1],
+                    start=df.index[0]+pd.Timedelta('30s'),
+                    end=df.index[-1]-pd.Timedelta('30s'),
                     freq='1min',
                     tz='UTC')
 
@@ -1160,8 +1160,8 @@ def get_solar_forecast_ensemble_subset(
 
             # make 1min interval clear sky data covering our time range
             times = pd.date_range(
-                start=df.index[0],
-                end=df.index[-1],
+                start=df.index[0]+pd.Timedelta('30s'),
+                end=df.index[-1]-pd.Timedelta('30s'),
                 freq='1min',
                 tz='UTC')
 
@@ -1588,8 +1588,8 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
 
             # make 1min interval clear sky data covering our time range
             times_1min = pd.date_range(
-                start=df.index[0],
-                end=df.index[-1],
+                start=df.index[0]+pd.Timedelta('30s'),
+                end=df.index[-1]-pd.Timedelta('30s'),
                 freq='1min',
                 tz='UTC')
 
@@ -1792,8 +1792,8 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
 
                 # make 1min interval clear sky data covering our time range
                 times = pd.date_range(
-                    start=df.index[0],
-                    end=df.index[-1],
+                    start=df.index[0]+pd.Timedelta('30s'),
+                    end=df.index[-1]-pd.Timedelta('30s'),
                     freq='1min',
                     tz='UTC')
 
