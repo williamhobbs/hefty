@@ -18,7 +18,7 @@ import tomllib
 
 def get_solar_forecast(latitude, longitude, init_date, run_length,
                        lead_time_to_start=0, model='gfs', member='avg',
-                       attempts=2, hrrr_hour_middle=True,
+                       attempts=2, hrrr_hour_middle=None,
                        hrrr_coursen_window=None, priority=None,
                        cams_api_key=None, cams_area=None,
                        decomp_model='dirindex'):
@@ -273,9 +273,14 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         # convert air temperature units
         df_temp['temp_air'] = df_temp['t2m'] - 273.15
 
-        # keep only select columns
-        df_temp = df_temp[['point', 'sdswrf', 'wind_speed', 'temp_air',
-                           'ssrdc', 'vbdsf', 'cdir', 'time']].copy()
+        # list of all possible column names to keep
+        keep_cols = ['point', 'sdswrf', 'wind_speed', 'temp_air',
+                     'ssrdc', 'vbdsf', 'cdir', 'step']
+        # filter columns
+        df_temp = df_temp[df_temp.columns.intersection(keep_cols)]
+
+        df_temp['step'] = df_temp['step'] / np.timedelta64(1, 'h')
+        df_temp.rename(columns={'step': 'lead_time'}, inplace=True)
 
         # make index valid_time
         df_temp = df_temp.reset_index().set_index(['valid_time'])
@@ -454,16 +459,13 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
         elif model == 'cams':
             # 60min version of data, centered at bottom of the hour
-            # 1min interpolation, then 60min mean
-            df_60min = (
-                df[['temp_air', 'wind_speed']]
-                .resample('1min')
-                .interpolate()
-                .resample('60min').mean()
-            )
-            # make timestamps center-labeled for instantaneous pvlib modeling
-            # later
-            df_60min.index = df_60min.index + pd.Timedelta('30min')
+            new_index = pd.date_range(df.index.min(),
+                                      df.index.max(),
+                                      freq='30min',
+                                      name='valid_time')
+            df_interp = df[['temp_air', 'wind_speed', 'lead_time']].reindex(
+                new_index).interpolate(method='time')
+            df_60min = df_interp[df_interp.index.minute == 30]
 
             # adjust timestamps to center of interval
             df.index = df.index - pd.Timedelta('30min')
@@ -477,8 +479,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             cos_zenith = np.maximum(np.cos(np.deg2rad(sp['apparent_zenith'])),
                                     min_cos_zenith)
             df['dni_clear'] = (df['direct_horiz_clear'] / cos_zenith)
-            df_60min = df_60min.join(df.drop(['temp_air', 'wind_speed'],
-                                             axis=1))
+            df_60min = df_60min.join(df.drop(
+                ['temp_air', 'wind_speed', 'lead_time'], axis=1))
 
             # calculate dhi from ghi, dni, solar position
             df_60min['dhi'] = (df_60min['ghi'] -
@@ -487,7 +489,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # clean up dataframe
             df_60min['ghi_clear'] = df_60min['ghi_clear_nwp']
             df_60min = df_60min[['temp_air', 'wind_speed', 'ghi', 'dni', 'dhi',
-                                 'ghi_clear', 'dni_clear', 'time',
+                                 'ghi_clear', 'dni_clear', 'lead_time',
                                  'direct_horiz_clear']]
 
             dfs[j] = df_60min
@@ -646,7 +648,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         for n^2 minutes after each n attempt, e.g., 1 min after the first
         attempt, 4 minutes after the second, etc.
 
-    hrrr_hour_middle : bool, default True
+    hrrr_hour_middle : bool or None, default True
         If model is 'hrrr', setting this False keeps the forecast at the
         native instantaneous top-of-hour format. True (default) shifts
         the forecast to middle of the hour, more closely representing an
