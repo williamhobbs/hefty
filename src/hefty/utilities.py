@@ -30,6 +30,8 @@ def get_fcast_definition(model='gfs'):
     -----
     ``delay_intercept`` and ``delay_slope`` values are based on this gist,
     https://gist.github.com/williamhobbs/9585ff5d1248ab5de4d9e8665d7c8ea6,
+    also available as a markdown file,
+    https://github.com/williamhobbs/hefty/blob/main/docs/forecast_model_delays.md,
     and https://dynamical.org/status/, along with
     https://confluence.ecmwf.int/display/DAC/Dissemination+schedule and
     https://confluence.ecmwf.int/display/CKB/CAMS%3A+Global+atmospheric+composition+forecast+data+documentation#heading-DataavailabilityHHMM.
