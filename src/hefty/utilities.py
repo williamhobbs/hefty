@@ -196,10 +196,7 @@ def get_fcast_definition(model='gfs'):
 
     # AIFS ENS
     # First available 2025-07-2, added one day, as I seem to recall some
-    # variables were missing for a few days
-    # (https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html)
-    # Schedule is unverified, based on
-    # https://confluence.ecmwf.int/display/DAC/Dissemination+schedule
+    # variables were missing for a few days (https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html)
     fcast_sched_dict_aifs_ens = {
         'start_date': ['2025-07-03 00:00'],
         'start_hour': [0, 0],
