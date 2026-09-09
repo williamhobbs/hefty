@@ -18,7 +18,7 @@ import tomllib
 
 def get_solar_forecast(latitude, longitude, init_date, run_length,
                        lead_time_to_start=0, model='gfs', member='avg',
-                       attempts=2, hrrr_hour_middle=None,
+                       attempts=2, hrrr_hour_middle=True,
                        hrrr_coursen_window=None, priority=None,
                        cams_api_key=None, cams_area=None,
                        decomp_model='dirindex'):
@@ -274,11 +274,12 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         df_temp['temp_air'] = df_temp['t2m'] - 273.15
 
         # list of all possible column names to keep
-        keep_cols = ['point', 'sdswrf', 'wind_speed', 'temp_air',
-                     'ssrdc', 'vbdsf', 'cdir', 'step']
+        keep_cols = ['point', 'sdswrf', 'wind_speed', 'wind_direction',
+                     'temp_air', 'ssrdc', 'vbdsf', 'cdir', 'step']
         # filter columns
         df_temp = df_temp[df_temp.columns.intersection(keep_cols)]
 
+        # convert step to lead_time
         df_temp['step'] = df_temp['step'] / np.timedelta64(1, 'h')
         df_temp.rename(columns={'step': 'lead_time'}, inplace=True)
 
@@ -385,7 +386,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                                       df.index.max(),
                                       freq='30min',
                                       name='valid_time')
-            cols = ['temp_air', 'wind_speed', 'lead_time']
+            cols = ['temp_air', 'wind_speed', 'wind_direction', 'lead_time']
             df_interp = df[cols].reindex(
                 new_index).interpolate(method='time')
             df_60min = df_interp[df_interp.index.minute == 30]
@@ -463,8 +464,9 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                                       df.index.max(),
                                       freq='30min',
                                       name='valid_time')
-            df_interp = df[['temp_air', 'wind_speed', 'lead_time']].reindex(
-                new_index).interpolate(method='time')
+            df_interp = df[['temp_air', 'wind_speed', 'wind_direction',
+                            'lead_time']].reindex(
+                                new_index).interpolate(method='time')
             df_60min = df_interp[df_interp.index.minute == 30]
 
             # adjust timestamps to center of interval
@@ -480,7 +482,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                                     min_cos_zenith)
             df['dni_clear'] = (df['direct_horiz_clear'] / cos_zenith)
             df_60min = df_60min.join(df.drop(
-                ['temp_air', 'wind_speed', 'lead_time'], axis=1))
+                ['temp_air', 'wind_speed', 'wind_direction',
+                 'lead_time'], axis=1))
 
             # calculate dhi from ghi, dni, solar position
             df_60min['dhi'] = (df_60min['ghi'] -
@@ -488,8 +491,9 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
             # clean up dataframe
             df_60min['ghi_clear'] = df_60min['ghi_clear_nwp']
-            df_60min = df_60min[['temp_air', 'wind_speed', 'ghi', 'dni', 'dhi',
-                                 'ghi_clear', 'dni_clear', 'lead_time',
+            df_60min = df_60min[['temp_air', 'wind_speed', 'wind_direction',
+                                 'ghi', 'dni', 'dhi', 'ghi_clear',
+                                 'dni_clear', 'lead_time',
                                  'direct_horiz_clear']]
 
             dfs[j] = df_60min
@@ -535,10 +539,11 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
                 # calculate 1min interpolated temp_air, wind_speed, csi
                 df_01min = (
-                    df[['temp_air', 'wind_speed', 'csi_ghi', 'csi_dni']]
-                    .resample('1min')
-                    .interpolate()
-                )
+                    df[['temp_air', 'wind_speed', 'wind_direction', 'csi_ghi',
+                        'csi_dni', 'lead_time']]
+                    .resample('1min', offset='30s', closed='left')
+                    .interpolate(method='time')
+                )[1:]  # drop first row, which is NaNs
                 # add ghi_clear
                 df_01min['ghi_clear'] = cs['ghi']
                 df_01min['dni_clear'] = cs['dni']
@@ -551,7 +556,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 df_60min['dni'] = df_60min['csi_dni'] * df_60min['dni_clear']
 
             else:
-                df_60min = df.copy()
+                df_60min = df[['ghi', 'dni', 'temp_air', 'wind_speed',
+                               'wind_direction', 'lead_time']]
 
             # calculate dhi from ghi, dni, solar position
             sp = pvlib.solarposition.ephemeris(
@@ -820,7 +826,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                                       df.index.max(),
                                       freq='30min',
                                       name='valid_time')
-            cols = ['temp_air', 'wind_speed', 'lead_time']
+            cols = ['temp_air', 'wind_speed', 'wind_direction', 'lead_time']
             df_interp = df[cols].reindex(
                 new_index).interpolate(method='time')
             df_60min = df_interp[df_interp.index.minute == 30]
@@ -925,10 +931,11 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
 
                 # calculate 1min interpolated temp_air, wind_speed, csi
                 df_01min = (
-                    df[['temp_air', 'wind_speed', 'csi_ghi', 'csi_dni']]
-                    .resample('1min')
-                    .interpolate()
-                )
+                    df[['temp_air', 'wind_speed', 'wind_direction', 'csi_ghi',
+                        'csi_dni', 'lead_time']]
+                    .resample('1min', offset='30s', closed='left')
+                    .interpolate(method='time')
+                )[1:]  # drop first row, which is NaNs
                 # add ghi_clear
                 df_01min['ghi_clear'] = cs['ghi']
                 df_01min['dni_clear'] = cs['dni']
@@ -941,7 +948,8 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                 df_60min['dni'] = df_60min['csi_dni'] * df_60min['dni_clear']
 
             else:
-                df_60min = df.copy()
+                df_60min = df[['ghi', 'dni', 'temp_air', 'wind_speed',
+                               'wind_direction', 'lead_time']]
 
             # calculate dhi from ghi, dni, solar position
             sp = pvlib.solarposition.ephemeris(
@@ -1202,7 +1210,7 @@ def get_solar_forecast_ensemble_subset(
             df_60min = (
                 df['dummy']
                 .resample('1min')
-                .interpolate()
+                .interpolate(method='time')
                 .resample('60min').mean()
             )
             # make timestamps center-labeled for instantaneous pvlib modeling
@@ -1359,7 +1367,7 @@ def get_solar_forecast_ensemble_subset(
         df_60min_temp_air = (
             df[['temp_air']]
             .resample('1min')
-            .interpolate()
+            .interpolate(method='time')
             .resample('60min').mean()
         )
 
@@ -1393,6 +1401,7 @@ def get_solar_forecast_ensemble_subset(
 
     # add generic wind
     df_60min['wind_speed'] = 2
+    df_60min['wind_direction'] = 0
 
     return df_60min
 
@@ -1567,9 +1576,11 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 on=['valid_time', 'point'])
             # add 2 m/s wind speed
             df_temp['wind_speed'] = 2
+            df_temp['wind_direction'] = 0
         elif get_ens_temp and not get_ens_wind:
             # add 2 m/s wind speed
             df_temp['wind_speed'] = 2
+            df_temp['wind_direction'] = 0
 
         # work through sites (points) and members
         member_list = df_temp['number'].unique()
@@ -1657,7 +1668,8 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                           df.index.max(),
                                           freq='30min',
                                           name='valid_time')
-                cols = ['temp_air', 'wind_speed', 'lead_time']
+                cols = ['temp_air', 'wind_speed', 'wind_direction',
+                        'lead_time']
                 df_interp = df[cols].reindex(
                     new_index).interpolate(method='time')
                 df_60min = df_interp[df_interp.index.minute == 30]
@@ -1752,9 +1764,11 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 on=['valid_time', 'point'])
             # add 2 m/s wind speed
             df_merged['wind_speed'] = 2
+            df_merged['wind_direction'] = 0
         elif get_ens_temp and not get_ens_wind:
             # add 2 m/s wind speed
             df_merged['wind_speed'] = 2
+            df_merged['wind_direction'] = 0
 
         dfs = []
         # work back through members
@@ -1831,7 +1845,8 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                           df.index.max(),
                                           freq='30min',
                                           name='valid_time')
-                cols = ['temp_air', 'wind_speed', 'lead_time']
+                cols = ['temp_air', 'wind_speed', 'wind_direction',
+                        'lead_time']
                 df_interp = df[cols].reindex(
                     new_index).interpolate(method='time')
                 df_60min = df_interp[df_interp.index.minute == 30]

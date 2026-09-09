@@ -1166,7 +1166,7 @@ def get_fcast_dataframe(
             model_herbie = 'aifs'
         else:
             model_herbie = model
-    if priority == 'dynamical':
+    elif priority == 'dynamical':
         if member is not None:
             if isinstance(member, str) and (member.lower() in
                                             [x.lower() for x in
@@ -1174,6 +1174,9 @@ def get_fcast_dataframe(
                 member = 'mean'
             elif isinstance(member, str):
                 member = int(''.join(filter(str.isdigit, member)))
+    else:
+        msg = f'"{priority}" is not a valid input for priority.'
+        raise ValueError(msg)
 
     search_string_list = search_str.split('|')
 
@@ -1294,6 +1297,7 @@ def get_fcast_dataframe(
             mapper = {
                 'step': 'lead_time',
                 'si10': 'wind_speed',
+                'wdir10': 'wind_direction',
                 't2m': 'temp_air',
                 'ssrd': 'sdswrf'
             }
@@ -1416,7 +1420,7 @@ def get_fcast_dataframe(
                 'visible_beam_downward_solar_flux_surface': 'vbdsf',
                 'temperature_2m': 'temp_air',
                 'wind_speed_10m': 'wind_speed',
-                'wind_direction_10m': 'wdir10',
+                'wind_direction_10m': 'wind_direction',
                 'ensemble_member': 'number',  # hefty uses "number" to indicate ensemble member
             }
         elif resource_type == 'wind':
