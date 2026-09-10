@@ -1556,17 +1556,17 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
             member)
         # if needed, get search strings that are remaining
         if not get_ens_temp and not get_ens_wind:
-            _, _, _, search_str_2 = model_input_formatter(
-                    init_date, run_length, lead_time_to_start, model,
-                    resource_type, full_ens=False, get_ens_temp=False,
-                    get_ens_wind=False, member=0)
-            # 2m temperature search string should be second
-            search_str_cust = "|".join(search_str_2.split('|')[1:2])
             # use the control member
             member_cust = 0
+            _, _, product_cust, search_str_2 = model_input_formatter(
+                    init_date, run_length, lead_time_to_start, model,
+                    resource_type, full_ens=False, get_ens_temp=False,
+                    get_ens_wind=False, member=member_cust)
+            # 2m temperature search string should be second
+            search_str_cust = "|".join(search_str_2.split('|')[1:2])
             df_rem = get_fcast_dataframe(
                 latitude, longitude, init_date, fxx_range, model,
-                search_str_cust, priority, product,
+                search_str_cust, priority, product_cust,
                 fast, attempts, resource_type,
                 member_cust)
             # merge
