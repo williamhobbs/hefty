@@ -1,6 +1,10 @@
 import pandas as pd
 import warnings
 import math
+import numpy as np
+from herbie import Herbie, FastHerbie
+import xarray as xr
+import time
 
 
 def get_fcast_definition(model='gfs'):
@@ -29,7 +33,7 @@ def get_fcast_definition(model='gfs'):
     also available as a markdown file,
     https://github.com/williamhobbs/hefty/blob/main/docs/forecast_model_delays.md,
     and https://dynamical.org/status/, along with
-    https://confluence.ecmwf.int/display/DAC/Dissemination+schedule and 
+    https://confluence.ecmwf.int/display/DAC/Dissemination+schedule and
     https://confluence.ecmwf.int/display/CKB/CAMS%3A+Global+atmospheric+composition+forecast+data+documentation#heading-DataavailabilityHHMM.
 
     The ``'Forecast Schedule Dictionary'`` within ``fcast_definition``
@@ -62,7 +66,8 @@ def get_fcast_definition(model='gfs'):
     # Forecast Definitions
     # ===========================================================
     # IFS
-    # first available 2023-01-18 (https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html#Data-Availability)
+    # first available 2023-01-18
+    # (https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html#Data-Availability)
     fcast_sched_dict_ifs_1 = {
         'start_date': ['2023-01-18 00:00',
                        '2023-01-18 00:00',
@@ -115,7 +120,8 @@ def get_fcast_definition(model='gfs'):
 
     # IFS Ensemble
     # IFS ens does not have ssrd until sometime March 2024. '2024-03-12 12:00'
-    # was the first init_date used in https://github.com/williamhobbs/PVSC-2025-daily-energy-forecaster,
+    # was the first init_date used in
+    # https://github.com/williamhobbs/PVSC-2025-daily-energy-forecaster,
     # so start there for now.
     # delays based on https://dynamical.org/status/ as of 2026-04-24.
     # From https://www.ecmwf.int/en/forecasts/datasets/open-data,
@@ -161,7 +167,8 @@ def get_fcast_definition(model='gfs'):
     }
 
     # AIFS
-    # First available 2024-02-01 (https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html)
+    # First available 2024-02-01
+    # (https://herbie.readthedocs.io/en/stable/gallery/ecmwf_models/ecmwf.html)
     fcast_sched_dict_aifs = {
         'start_date': ['2024-02-01 00:00'],
         'start_hour': [0],
@@ -274,8 +281,10 @@ def get_fcast_definition(model='gfs'):
     # GEFS
     # Need to use GEFSv12 and newer to correspond to GFSv15.1 and newer (see
     # comments on GFS above).
-    # GEFSv12 is based on GFSv15.1 (https://journals.ametsoc.org/view/journals/mwre/150/3/MWR-D-21-0245.1.xml)
-    # Implemented 2020-09-23 (https://www.emc.ncep.noaa.gov/emc/pages/numerical_forecast_systems/gefs.php)
+    # GEFSv12 is based on GFSv15.1
+    # (https://journals.ametsoc.org/view/journals/mwre/150/3/MWR-D-21-0245.1.xml)
+    # Implemented 2020-09-23
+    # (https://www.emc.ncep.noaa.gov/emc/pages/numerical_forecast_systems/gefs.php)
     fcast_sched_dict_gefs = {
         'start_date': ['2020-09-24 01:00',
                        '2020-09-24 00:00',
@@ -543,7 +552,9 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
 
 
 def model_input_formatter(init_date, run_length, lead_time_to_start=0,
-                          model='gfs', resource_type='solar'):
+                          model='gfs', resource_type='solar',
+                          full_ens=False, get_ens_temp=False,
+                          get_ens_wind=False, member=None):
     """
     Helper function to format model-specific inputs for Herbie.
 
@@ -576,6 +587,29 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
     resource_type : {'solar, 'wind'}
         Resrouce type. Default is 'solar'.
 
+    full_ens : bool, default False
+        Whether to get the full ensemble (all members) for ensemble models.
+        ``member`` needs to be ``None`` if ``full_ens`` is ``True``.
+
+    get_ens_temp : bool, default False
+        Get air temperature from each ensemble member if `True`. Otherwise,
+        if `False` (default), get air temperature from the control member and
+        use it for all forecasts. Setting to `True` approximately doubles the
+        amount of data and the time needed to download and process it. Must
+        be `True` if `get_ens_wind` is `True`. ``member`` needs to be ``None``
+        if ``get_ens_temp`` is ``True``.
+
+    get_ens_wind : bool, default False
+        Get wind speed from each ensemble member if `True`. Otherwise, if
+        `False` (default), wind speed is a generic 2 m/s value to save time.
+        ``member`` needs to be ``None`` if ``get_ens_wind`` is ``True``.
+
+    member : int or string or None, default None
+        Valid member for IFS ensemble, AIFS ensemble, or GEFS. Could be 0-51
+        for IFS/AIFS, where 0 is the control and 1-50 are perturbed members,
+        0-31 for GEFS, where 0 is control and 1-30 are perturbed members. Can
+        also be 'avg' or 'mean' (case-insensitive) to get the ensemble mean
+
     Returns
     -------
     date : pandas-parsable datetime
@@ -592,6 +626,31 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         wgrib2-style search string for Herbie to select variables of interest.
     """
 
+    if resource_type == 'solar':
+        if (get_ens_wind or get_ens_temp) and not full_ens:
+            raise ValueError('get_ens_wind or get_ens_temp is True but '
+                             'full_ens is False. full_ens must be True '
+                             'to get ensemble wind or temperature.')
+        if get_ens_wind and not get_ens_temp:
+            raise ValueError('get_ens_wind is True but get_ens_temp is '
+                             'False. get_ens_temp must be True to also '
+                             'get ensemble wind.')
+    elif resource_type == 'wind':
+        if get_ens_wind or get_ens_temp or full_ens:
+            raise ValueError('ensemble options are not yet available '
+                             'for resource_type="wind".')
+    else:
+        raise ValueError(f'resource_type must be "solar" or "wind". You '
+                         f'entered "{resource_type}".')
+    if full_ens and member is not None:
+        raise ValueError(f'full_ens is true but a value of {member} provided '
+                         'for member. member should be None if full_ens=True.')
+
+    init_date = pd.to_datetime(init_date)
+
+    # maximum forecast horizon, update with new lead time
+    fxx_max = run_length + lead_time_to_start
+
     if model == 'gfs':
         # GFS:
         # 0 to 120 by 1, 123 to 384 by 3
@@ -603,9 +662,6 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         # # offset in hours between selected init_date and fcast run
         # init_offset = int((init_date - date).total_seconds()/3600)
         # lead_time_to_start = lead_time_to_start + init_offset
-
-        # maximum forecast horizon, update with new lead time
-        fxx_max = run_length + lead_time_to_start
 
         # Herbie inputs
         product = 'pgrb2.0p25'
@@ -654,9 +710,6 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         # init_offset = int((init_date - date).total_seconds()/3600)
         # lead_time_to_start = lead_time_to_start + init_offset
 
-        # maximum forecast horizon, update with new lead time
-        fxx_max = run_length + lead_time_to_start
-
         # Herbie inputs
         if resource_type == 'solar':
             # solar radiation is not available for f00 (lead_time_to_start=0)
@@ -668,12 +721,22 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
                          "than 3 h. GHI in GEFS is only available "
                          "starting at F03. The lead_time_to_start has been "
                          "changed to 3 h."))
-
             if fxx_max <= 240:
                 product = 'atmos.25'  # 0.25 deg, 'pgrb2a.0p25'
-                search_str = 'DSWRF|:TMP:2 m above|[UV]GRD:10 m above'
             else:
                 product = 'atmos.5'  # 0.5 deg, 'pgrb2a.0p5'
+
+            if full_ens:
+                if not get_ens_temp and not get_ens_wind:
+                    search_str = 'DSWRF'
+                elif get_ens_temp and not get_ens_wind:
+                    search_str = 'DSWRF|:TMP:2 m above'
+                elif get_ens_temp and get_ens_wind:
+                    search_str = 'DSWRF|:TMP:2 m above|[UV]GRD:10 m above'
+            else:
+                # needs to be ordered "ghi|temp_air|wind_speed" to work with
+                # get_solar_forecast_ensemble with get_ens_temp=False,
+                # get_ens_wind=False
                 search_str = 'DSWRF|:TMP:2 m above|[UV]GRD:10 m above'
         elif resource_type == 'wind':
             # 2m temp and 10m wind are in pgrb2a, but 80 and 100m are in
@@ -699,7 +762,7 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         else:
             fxx_range = range(lead_time_to_start, fxx_max + 1, 3)
 
-    elif model == 'ifs' or model == 'ifs_ens':
+    elif model in ['ifs', 'ifs_ens', 'aifs', 'aifs_ens']:
         # From https://www.ecmwf.int/en/forecasts/datasets/open-data
         # For times 00z &12z: 0 to 144 by 3, 150 to 360 by 6.
         # For times 06z & 18z: 0 to 144 by 3.
@@ -711,112 +774,110 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         # Starting 2024-11-12 06:00, 'scda' runs to 144h by 3h
         # Starting 2024-11-12 12:00, 'oper' runs to 360h by 6h
 
-        # # round to last 6 hours to start
-        # date = init_date.floor('6h')
-        # init_offset = int((init_date - date).total_seconds()/3600)
-        # lead_time_to_start = lead_time_to_start + init_offset
-        fxx_max = run_length + lead_time_to_start
-
-        # # pick init time based on forecast max lead time:
-        # # check if 'scda' product is ideal
-        # if init_date.hour == 6 or init_date.hour == 18:
-        #     if init_date >= pd.to_datetime('2024-11-12 06:00'):
-        #         scda_fxx_max = 144
-        #     else:
-        #         scda_fxx_max = 90
-        #     if fxx_max > scda_fxx_max:  # forecast beyond scda
-        #         update_freq = '12h'  # must use 'oper' runs
-        #         warnings.warn(
-        #             ("You have specified an init_date which would have mapped "
-        #              "to a 06z or 18z. Those runs the IFS 'scda' product, and "
-        #              "'scda' only goes out 144 hours (90h prior to 2024-11-12)"
-        #              ". You will get forecasts from the 'oper' run 6 hours "
-        #              "earlier, instead."))
-        #     else:
-        #         update_freq = '6h'  # can use 'oper' or 'scda'
-        # else:
-        #     update_freq = '6h'  # can use 'oper' or 'scda'
-        # # round down to last actual initialization time
-        # date = init_date.floor(update_freq)
-
-        # # offset in hours between selected init_date and fcast run
-        # init_offset = int((init_date - date).total_seconds()/3600)
-        # lead_time_to_start = lead_time_to_start + init_offset
         if lead_time_to_start > 141:
             run_length = max(run_length, 6)  # make sure it's long enough
         fxx_max = run_length + lead_time_to_start  # update this
 
         # set forecast intervals
-        if lead_time_to_start <= 144 and fxx_max > 144:
-            lead_time_to_start = round(lead_time_to_start/3)*3
-            fxx_max = round(fxx_max/6)*6
-            # make sure it goes to at least the next interval
-            fxx_max = max(fxx_max, 150)
-            fxx_range = [*range(lead_time_to_start, 145, 3),
-                         *range(150, fxx_max + 1, 6)]
-        elif lead_time_to_start > 144:
-            lead_time_to_start = round(lead_time_to_start/6)*6
-            fxx_max = round(fxx_max/6)*6
+        if model == 'ifs' or model == 'ifs_ens':
+            if lead_time_to_start <= 144 and fxx_max > 144:
+                lead_time_to_start = round(lead_time_to_start/3)*3
+                fxx_max = round(fxx_max/6)*6
+                # make sure it goes to at least the next interval
+                fxx_max = max(fxx_max, 150)
+                fxx_range = [*range(lead_time_to_start, 145, 3),
+                             *range(150, fxx_max + 1, 6)]
+            elif lead_time_to_start > 144:
+                lead_time_to_start = round(lead_time_to_start/6)*6
+                fxx_max = round(fxx_max/6)*6
+                fxx_range = range(lead_time_to_start, fxx_max + 1, 6)
+            else:
+                lead_time_to_start = round(lead_time_to_start/3)*3
+                fxx_max = round(fxx_max/3)*3
+                fxx_range = range(lead_time_to_start, fxx_max + 1, 3)
+        elif model == 'aifs' or model == 'aifs_ens':
             fxx_range = range(lead_time_to_start, fxx_max + 1, 6)
-        else:
-            lead_time_to_start = round(lead_time_to_start/3)*3
-            fxx_max = round(fxx_max/3)*3
-            fxx_range = range(lead_time_to_start, fxx_max + 1, 3)
 
         # Herbie inputs
-        init_date = pd.to_datetime(init_date)
         # scda goes away/went away 2026-05-12
-        # see https://confluence.ecmwf.int/display/FCST/Implementation+of+IFS+Cycle+50r1
-        if (init_date.tz_localize(None) <
-            pd.to_datetime('2026-05-12 06:00') and
-            (init_date.hour == 6 or
-             init_date.hour == 18)):
-            product = 'scda'
-        else:
-            product = 'oper'
+        # see
+        # https://confluence.ecmwf.int/display/FCST/Implementation+of+IFS+Cycle+50r1
+        if model == 'ifs':
+            if (init_date.tz_localize(None) <
+                pd.to_datetime('2026-05-12 06:00') and
+                (init_date.hour == 6 or
+                 init_date.hour == 18)):
+                product = 'scda'
+            else:
+                product = 'oper'
+            if resource_type == 'solar':
+                search_str = ':ssrd|:2t|:10[uv]'
+            elif resource_type == 'wind':
+                search_str = ':10[uv]|:100[uv]|:2t|:sp'
 
-        if resource_type == 'solar':
-            search_str = ':ssrd|10[uv]|2t:sfc'
-        elif resource_type == 'wind':
-            search_str = ':10[uv]|:100[uv]|:2t:sfc|:sp:'
+        elif model == 'aifs':
+            product = 'oper'  # deterministic
+            if resource_type == 'solar':
+                search_str = ':ssrd|:2t|:10[uv]'
+            elif resource_type == 'wind':
+                search_str = ':10[uv]|:100[uv]|:2t|:sp'
 
-    elif model == 'aifs' or model == 'aifs_ens':
-        # From https://www.ecmwf.int/en/forecasts/datasets/set-ix,
-        # https://www.ecmwf.int/en/forecasts/dataset/set-x
-        # 4 forecast runs per day (00/06/12/18)
-        # 6 hourly steps to 360 (15 days)
+        elif model == 'ifs_ens' or model == 'aifs_ens':
+            if model == 'ifs_ens':
+                if (init_date.tz_localize(None) >
+                    pd.to_datetime('2026-05-12 00:00') and
+                    (member == 0 or
+                     member == '0')):
+                    product = 'oper'
+                else:
+                    product = 'enfo'
+            elif model == 'aifs_ens':
+                product = 'enfo'
 
-        # # round to last 6 hours to start
-        # date = init_date.floor('6h')
-        # init_offset = int((init_date - date).total_seconds()/3600)
-        # lead_time_to_start = lead_time_to_start + init_offset
-        fxx_max = run_length + lead_time_to_start
+            # full ensemble, no member
+            if full_ens and member is None:
+                # get GHI data for all IFS ensemble members (not the mean)
+                # search for ":ssrd:sfc:" and NOT ":ssrd:sfc:g"
+                # (the "g" is right after sfc if there is no member number)
+                # regex based on https://superuser.com/a/1335688
+                if not get_ens_temp and not get_ens_wind:
+                    search_str = '^(?=.*:ssrd:sfc:)(?:(?!:ssrd:sfc:g).)*$'
+                # similar for 2m temp
+                elif get_ens_temp and not get_ens_wind:
+                    search_str = (
+                        '^(?=.*:ssrd:sfc:)(?:(?!:ssrd:sfc:g).)*$'
+                        '|^(?=.*:2t:sfc:)(?:(?!:2t:sfc:g).)*$'
+                    )
+                # and similar for wind
+                elif get_ens_temp and get_ens_wind:
+                    search_str = (
+                        '^(?=.*:ssrd:sfc:)(?:(?!:ssrd:sfc:g).)*$'
+                        '|^(?=.*:2t:sfc:)(?:(?!:2t:sfc:g).)*$'
+                        '|^(?=.*:10[uv]:)(?:(?!:10[uv]:sfc:g).)*$'
+                    )
+            # not full ensemble, but no member specified
+            elif not full_ens and member is None:
+                msg = ('You set full_ens=False and did not specify a '
+                       'member. Please provide a member.')
+                raise ValueError(msg)
+            # not full ensemble, member is specified, doesn't require ifs oper
+            elif not full_ens and product == 'enfo':
+                if member == 0 or member == '0':
+                    # needs to be ordered "ghi|temp_air|wind_speed" to work
+                    # with get_solar_forecast_ensemble w/ get_ens_temp=False,
+                    # get_ens_wind=False
+                    search_str = (':ssrd:sfc:g|:2t:sfc:g|:10[uv]:sfc:g')
+                else:
+                    search_str = (
+                        f':ssrd:sfc:{member}:g|:2t:sfc:{member}:g'
+                        f'|:10[uv]:sfc:{member}:g'
+                    )
 
-        # update_freq = '6h'
-        # # round down to last actual initialization time
-        # date = init_date.floor(update_freq)
-
-        # # offset in hours between selected init_date and fcast run
-        # init_offset = int((init_date - date).total_seconds()/3600)
-        # lead_time_to_start = lead_time_to_start + init_offset
-        if lead_time_to_start > 141:
-            run_length = max(run_length, 6)  # make sure it's long enough
-        fxx_max = run_length + lead_time_to_start  # update this
-
-        # set forecast intervals
-        fxx_range = range(lead_time_to_start, fxx_max + 1, 6)
-
-        # Herbie inputs
-        product = 'oper'  # deterministic
-
-        if resource_type == 'solar':
-            search_str = ':ssrd|10[uv]|2t:sfc'
-        elif resource_type == 'wind':
-            search_str = ':10[uv]|:100[uv]|:2t:sfc|:sp:'
+            elif not full_ens and (product == 'oper' or model == 'aifs_ens'):
+                search_str = ':ssrd|:2t|:10[uv]'
 
     elif model == 'hrrr':
-        # maximum forecast horizon
-        fxx_max = run_length + lead_time_to_start
+
         product = 'sfc'
 
         if resource_type == 'solar':
@@ -827,15 +888,11 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
                 ':TMP:2 m above|PRES:surface'
             )
 
-        # update_freq = '1h'
-
-        # # round down to last actual initialization time
-        # date = init_date.floor(update_freq)
-
         fxx_range = range(lead_time_to_start, fxx_max + 1, 1)
 
     elif model == 'cams':
-        # From https://confluence.ecmwf.int/display/CKB/CAMS%3A+Global+atmospheric+composition+forecast+data+documentation
+        # From
+        # https://confluence.ecmwf.int/display/CKB/CAMS%3A+Global+atmospheric+composition+forecast+data+documentation
         # Runs 00z and 12z, 0-120h by 1h for single-level parameters
         # 00 UTC data available by 10:00 UTC
         # 12 UTC data available by 22:00 UTC
@@ -844,16 +901,690 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
         product = None
         search_str = None
 
-        # # round to last 12 hours to start
-        # date = init_date.floor('12h')
-        # init_offset = int((init_date - date).total_seconds()/3600)
-        # lead_time_to_start = lead_time_to_start + init_offset
-
-        # maximum forecast horizon
-        fxx_max = run_length + lead_time_to_start
         fxx_range = range(lead_time_to_start, fxx_max + 1, 1)
+
+    else:
+        raise ValueError(f'model="{model}" is not a valid input.')
 
     # strip tz from init_date if it has a tz
     init_date = init_date.tz_localize(None)
 
     return init_date, fxx_range, product, search_str
+
+
+def _fastherbie_downloader(latitude, longitude, init_date, resource_type,
+                           model, fxx_range, FH, search_string_list,
+                           ds_dict, j, hrrr_coursen_window,
+                           overwrite=False):
+    # try downloading
+    FH.download(search_string_list[j])
+    ds_dict[j] = FH.xarray(search_string_list[j],
+                           remove_grib=True,
+                           overwrite=overwrite)
+    # check for missing grib files. if any, raise error
+    # fixes GH #36
+    # see https://github.com/williamhobbs/hefty/issues/36
+    # for details
+    if len(ds_dict[j].step) < len(fxx_range):
+        msg = (f'{len(ds_dict[j].step)} fxx steps appear to be '
+               'missing. Another download will be attempted '
+               'if there are attempts remaining.')
+        raise ValueError(msg)
+    if model == 'ifs_ens' or model == 'aifs_ens':
+        # check for missing members. if any, raise error
+        # fixes GH #28
+        # see https://github.com/williamhobbs/hefty/issues/28 for
+        # details
+        for data_var in ds_dict[j].data_vars:
+            # count of valid values in each step/number
+            # combination (slicing along lat/lon plane)
+            c_v = (
+                ds_dict[j].count(dim=['latitude', 'longitude'])[data_var].
+                values)
+            num_missing_members = (np.count_nonzero(c_v == 0))
+            if num_missing_members > 0:
+                # indices of steps w/ missing members
+                steps_idx = (
+                    [i for i, sublist in enumerate(c_v) if 0 in
+                        sublist])
+                # fxx values
+                fxx_vals = ((ds_dict[j]['step'].values[steps_idx] /
+                            np.timedelta64(1, 'h')).
+                            astype(int).tolist())
+                msg = (f'{num_missing_members} members appear to '
+                       f'be missing for init_date {init_date}, fxx'
+                       f' values {fxx_vals}')
+                print(msg)
+                raise ValueError(msg)
+    # coarsen hrrr if needed
+    if model == 'hrrr' and hrrr_coursen_window is not None:
+        ds_dict[j] = ds_dict[j].coarsen(
+            x=hrrr_coursen_window,
+            y=hrrr_coursen_window,
+            boundary='trim').mean()
+    # reduce to points
+    ds_dict[j] = ds_dict[j].herbie.pick_points(pd.DataFrame({
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    }))
+    # calculate wind speed from u and v components if relevant
+    if ('uv' in search_string_list[j] or
+            'UV' in search_string_list[j]):
+        ds_dict[j] = ds_dict[j].herbie.with_wind()
+    # merge - override avoids height conflict between 2m temp
+    # and 10m wind
+    ds = xr.merge(ds_dict.values(), compat='override')
+
+    return ds_dict, ds
+
+
+def _herbie_downloader(latitude, longitude, init_date, resource_type,
+                       model, product, fxx, member, priority, search_str,
+                       hrrr_coursen_window, overwrite=False):
+    search_string_list = search_str.split('|')
+    num_datasets = len(search_string_list)
+    if resource_type == 'solar':
+        if model == 'hrrr':
+            # DNI and GHI will show up in a single dataset
+            num_datasets -= 1
+    if resource_type == 'wind':
+        if model in ['gfs', 'gefs']:
+            # 100 and 80 m wind; 80m t and p; show up in single datasets
+            num_datasets -= 2
+    # try downloading
+    ds = Herbie(
+        init_date,
+        model=model,
+        product=product,
+        fxx=fxx,
+        member=member,
+        priority=priority,
+        overwrite=overwrite,
+        ).xarray(search_str)
+    # address GH#77
+    if len(ds) < num_datasets:
+        msg = ('Parameters appear to be '
+               'missing. Another download '
+               'will be attempted if there are attempts '
+               'remaining.')
+        raise ValueError(msg)
+    # merge - override avoids height conflict between 2m
+    # temp and 10m wind
+    ds = xr.merge(ds, compat='override')
+
+    if resource_type == 'wind':
+        # addresses GH#41, https://github.com/blaylockbk/Herbie/issues/533
+        # check to see if an older version of eccodes (<=2.44.0) is being used
+        # if it is, for gfs and gefs, variables 'u100' and 'v100' will be in
+        # the dataset. if not (meaning eccodes>=2.45.0), manually rename those
+        # variables before merging.
+        if model == 'gfs' or model == 'gefs':
+            ds_var_list = [i for i in ds.data_vars]
+            if 'u100' not in ds_var_list:
+                ds100 = (ds.sel(heightAboveGround=100)[['u', 'v']].
+                         rename_vars({'u': 'u100', 'v': 'v100'}))
+                ds80 = (ds.sel(heightAboveGround=80)[['u', 'v']].
+                        rename_vars({'u': 'u80', 'v': 'v80'}))
+                ds = xr.merge([ds.drop_vars(['u', 'v']), ds100, ds80],
+                              compat='override')
+
+    # coarsen hrrr if needed
+    if model == 'hrrr' and hrrr_coursen_window is not None:
+        ds = ds.coarsen(
+            x=hrrr_coursen_window,
+            y=hrrr_coursen_window,
+            boundary='trim').mean()
+
+    # reduce to points
+    ds = ds.herbie.pick_points(pd.DataFrame({
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    }))
+    # calculate wind speed from u and v components if relevant
+    if ('uv' in search_str or 'UV' in search_str):
+        ds = ds.herbie.with_wind()
+
+    return ds
+
+
+try:
+    import dynamical_catalog
+    import cartopy
+except ImportError:
+    _has_dynamical_catalog = False
+else:
+    _has_dynamical_catalog = True
+
+
+def get_fcast_dataframe(
+        latitude, longitude, init_date, fxx_range, model,
+        search_str, priority, product=None,
+        fast=False, attempts=2, resource_type='solar',
+        member=None, hrrr_coursen_window=None):
+    """
+    Function to return a dataframe of forecasted resource data.
+
+    Parameters
+    ----------
+    latitude : float or list of floats
+        Latitude in decimal degrees. Positive north of equator, negative
+        to south.
+
+    longitude : float or list of floats
+        Longitude in decimal degrees. Positive east of prime meridian,
+        negative to west.
+
+    init_date : pandas-parsable datetime
+        Model initialization datetime. Note that this should be UTC and on the
+        hour for the models currently available with hefty, and most models
+        don't initialize every hour. See
+        :py:func:`hefty.utilities.adjust_forecast_datetimes` for help
+        determining appropriate init_date values.
+
+    fxx_range : int or list of ints
+        fxx (lead time) values. Expected to come from
+        :py:func:`hefty.utilities.model_input_formatter`
+
+    model : string, default 'gfs'
+        Forecast model. Can be NOAA GFS ('gfs'), ECMWF IFS single ('ifs')
+        of ensemble ('ifs_ens'), ECMWF AIFS single ('aifs') or esnsemble
+        ('aifs_ens'), NOAA HRRR ('hrrr'), or NOAA GEFS ensemble ('gefs').
+        ECMWF CAMS ('cams') is an experimental option. It requires cdsapi
+        to be installed and a CDS API key to be passed via the
+        'cams_api_key' parameter.
+
+    search_str : string
+        wgrib2-style search string for Herbie to select variables of
+        interest. For priority = 'dynamical', the search string will be
+        converted to dynamical.org variable names with the hardcoded
+        'mapping_in' dictionary in this function.
+
+    priority : list or string, default None
+        List of model sources to get the data in the order of download
+        priority, or string for a single source. See Herbie docs.
+        Typical values would be 'aws' or 'google'. Now includes option
+        of 'dynamical' to get data from dynamical.org. To use 'dynamical',
+        it must be a single string, not part of a list.
+
+    product : string, default None
+        Herbie product.
+
+    fast : boolean, default False
+        Use FastHerbie for herbie sources, default False
+
+    attempts : int
+        Number of attempts to try if using Herbie.
+
+    resource_type : {'solar, 'wind'}
+        Resrouce type. Default is 'solar'.
+
+    member : int or string or None, default None
+        Valid member for IFS ensemble, AIFS ensemble, or GEFS. Could be 0-51
+        for IFS/AIFS, where 0 is the control and 1-50 are perturbed members,
+        0-31 for GEFS, where 0 is control and 1-30 are perturbed members. Can
+        also be 'avg' or 'mean' (case-insensitive) to get the ensemble mean,
+        not available for 'ifs_ens' vie Herbie (i.e., priority other than
+        'dynamical').
+
+    hrrr_coursen_window : int or None, default None
+        If model is 'hrrr', optional setting that is the x and y window size
+        for coarsening the xarray dataset, effectively applying spatial
+        smoothing to the HRRR model. The HRRR has a native resolution of
+        about 3 km, so a value of 10 results in approx. 30 x 30 km grid.
+        Does not currently work with priority='dynamical'.
+
+    Returns
+    -------
+    df_out : pandas.DataFrane
+        raw output dataframe of forecasted parameters in the native time
+        step. Requires further processing to get "proper" hourly data.
+    """
+
+    use_fastherbie = False
+    use_herbie = False
+    get_control = None
+    if priority is None or priority.lower() in [x.lower() for x in [
+            'aws', 'google', 'azure', 'nomads', 'ecmwf']]:
+        if fast:
+            use_fastherbie = True
+        else:
+            use_herbie = True
+        # herbie doesn't have mean for IFS/AIFS, and it's too slow to
+        # calculate here
+        if ((model in ['ifs_ens', 'aifs_ens']) and
+                (member is not None) and
+                isinstance(member, str) and
+                (member.lower() in [x.lower() for x in ['avg', 'mean']])):
+            msg = (f'member={member} is not available for model={model}'
+                   f'and priority={priority}.')
+            raise ValueError(msg)
+        # set model_herbie variable
+        if model == 'ifs_ens':
+            model_herbie = 'ifs'
+        elif model == 'aifs_ens':
+            # for herbie "get_control" option with aifs ensemble
+            if member == 0 or member == '0':
+                get_control = True
+            else:
+                get_control = None
+            model_herbie = 'aifs'
+        else:
+            model_herbie = model
+    elif priority == 'dynamical':
+        if member is not None:
+            if isinstance(member, str) and (member.lower() in
+                                            [x.lower() for x in
+                                                ['avg', 'mean']]):
+                member = 'mean'
+            elif isinstance(member, str):
+                member = int(''.join(filter(str.isdigit, member)))
+    else:
+        msg = f'"{priority}" is not a valid input for priority.'
+        raise ValueError(msg)
+
+    search_string_list = search_str.split('|')
+
+    if use_fastherbie:
+        ds_dict = {}
+        # get FastHerbie object, address GH #2 including comments
+        for attempts_remaining in reversed(range(attempts)):
+            attempt_num = attempts - attempts_remaining
+            try:
+                FH = FastHerbie([init_date], model=model_herbie,
+                                product=product, fxx=fxx_range,
+                                member=member, priority=priority,
+                                get_control=get_control)
+            except Exception as e:
+                print(e)
+                if attempts_remaining:
+                    print(f'attempt {str(attempt_num)} failed, pause for '
+                          f'{str((attempt_num)**2)} min')
+                    time.sleep(60*(attempt_num)**2)
+                else:
+                    raise ValueError(f'download failed, ran out of '
+                                     f'attempts with error: {e}')
+            else:
+                break
+        # loop through search variables
+        for j in range(0, len(search_string_list)):
+            # get solar, 10m wind, and 2m temp data
+            # try n times based loosely on
+            # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
+            for attempts_remaining in reversed(range(attempts)):
+                attempt_num = attempts - attempts_remaining
+                try:
+                    if attempt_num == 1:
+                        # try downloading
+                        ds_dict, ds = _fastherbie_downloader(
+                            latitude, longitude, init_date, resource_type,
+                            model_herbie, fxx_range, FH, search_string_list,
+                            ds_dict, j, hrrr_coursen_window,
+                            overwrite=False)
+                    else:
+                        # after first attempt, set overwrite=True to overwrite
+                        # partial files
+                        ds_dict, ds = _fastherbie_downloader(
+                            latitude, longitude, init_date, resource_type,
+                            model_herbie, fxx_range, FH, search_string_list,
+                            ds_dict, j, hrrr_coursen_window,
+                            overwrite=True)
+                except Exception as e:
+                    print(e)
+                    if attempts_remaining:
+                        print(f'attempt {str(attempt_num)} failed, pause for '
+                              f'{str((attempt_num)**2)} min')
+                        time.sleep(60*(attempt_num)**2)
+                    else:
+                        raise ValueError(f'download failed, ran out of '
+                                         f'attempts with error: {e}')
+                else:
+                    break
+
+    elif use_herbie:
+        i = []
+        for fxx in fxx_range:
+            # get solar, 10m wind, and 2m temp data
+            # try n times based loosely on
+            # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
+            for attempts_remaining in reversed(range(attempts)):
+                attempt_num = attempts - attempts_remaining
+                try:
+                    if attempt_num == 1:
+                        ds = _herbie_downloader(
+                            latitude, longitude, init_date, resource_type,
+                            model_herbie, product, fxx, member, priority,
+                            search_str, hrrr_coursen_window, overwrite=False)
+                    else:
+                        ds = _herbie_downloader(
+                            latitude, longitude, init_date, resource_type,
+                            model_herbie, product, fxx, member, priority,
+                            search_str, hrrr_coursen_window, overwrite=True)
+                except Exception as e:
+                    print(e)
+                    if attempts_remaining:
+                        print('attempt ' + str(attempt_num)
+                              + ' failed, pause for '
+                              + str((attempt_num)**2) + ' min')
+                        time.sleep(60*(attempt_num)**2)
+                    else:
+                        raise ValueError(f'download failed, ran out of '
+                                         f'attempts with error: {e}')
+                else:
+                    break
+            i.append(ds)
+        ds = xr.concat(i, dim='valid_time', compat='no_conflicts',
+                       coords='different')
+
+    if use_fastherbie or use_herbie:
+        # convert to dataframe
+        df = ds.to_dataframe()
+        # reset index
+        df = df.reset_index()
+        # list of all possible column names to keep
+        keep_cols = [
+            'valid_time', 'step', 'number', 'point',  # time, location, ensemble member
+            'sdswrf', 'vbdsf', 'ssrd', 't2m', 'si10',  # solar resource
+            'ws', 'si80', 'si100', 'wdir', 'wdir10', 'wdir80', 'wdir100',  # wind resource
+            't', 'sp', 'pres'  # more wind resource
+        ]
+        # filter columns
+        df = df[df.columns.intersection(keep_cols)]
+        # convert units (temperature, step timedelta)
+        temperature_cols = ['t2m', 't']
+        for col in temperature_cols:
+            if col in df.columns:
+                df[col] = df[col] - 273.15
+        if 'step' in df.columns:
+            df['step'] = df['step'] / np.timedelta64(1, 'h')
+        # rename columns
+        if resource_type == 'solar':
+            mapper = {
+                'step': 'lead_time',
+                'si10': 'wind_speed',
+                'wdir10': 'wind_direction',
+                't2m': 'temp_air',
+                'ssrd': 'sdswrf'
+            }
+        elif resource_type == 'wind':
+            mapper = {
+                'step': 'lead_time',
+                'ws': 'wind_speed_80m',
+                'si10': 'wind_speed_10m',
+                'si80': 'wind_speed_80m',
+                'si100': 'wind_speed_100m',
+                'wdir': 'wind_direction_80m',
+                'wdir10': 'wind_direction_10m',
+                'wdir80': 'wind_direction_80m',
+                'wdir100': 'wind_direction_100m',
+                't2m': 'temp_air_2m',
+                't': 'temp_air_80m',
+                'sp': 'pressure_0m',
+                'pres': 'pressure_80m',
+            }
+        df = df.rename(columns=mapper)
+        # set index to valid_time
+        df = df.set_index('valid_time')
+        # add timezone
+        df = df.tz_localize('UTC')
+        # add member number
+        if model in ['gefs', 'ifs_ens', 'aifs_ens'] and member is not None:
+            if isinstance(member, str) and (
+                 member.lower() in [x.lower() for x in ['avg', 'mean']]):
+                member_out = 'mean'
+            elif isinstance(member, str):
+                new_string = ''.join(ch for ch in member if ch.isdigit())
+                member_out = int(new_string)
+            else:
+                member_out = member
+            df['number'] = member_out
+
+    elif priority == 'dynamical':
+        if not _has_dynamical_catalog:
+            raise ImportError((
+                "`dynamical_catalog` and `cartopy` are required to use "
+                "priority='dynamical'. Please install these, e.g., with "
+                "`pip install dynamical_catalog cartopy`."))
+        if hrrr_coursen_window is not None:
+            raise ValueError(
+                "hrrr_coursen_window option is not"
+                " currently available with priority='dynamical'")
+        ifs_single = False
+        if model == 'hrrr':
+            if pd.Timestamp(init_date).hour in {0, 6, 12, 18}:
+                dataset_id = 'noaa-hrrr-forecast-48-hour'
+            else:
+                print('accessing dynamical.org HRRR 18h *virtual* -'
+                      ' this will be slower than the HRRR 48h.')
+                dataset_id = 'noaa-hrrr-forecast-18-hour-virtual'
+        elif model == 'gfs':
+            dataset_id = 'noaa-gfs-forecast'
+        elif model == 'gefs':
+            if pd.Timestamp(init_date).hour != 0:
+                raise ValueError('gefs is only available from '
+                                 'dynamical.org for 00Z cycles')
+            else:
+                dataset_id = 'noaa-gefs-forecast-35-day'
+        elif model in {'ifs', 'ifs_ens'}:
+            if pd.Timestamp(init_date).hour != 0:
+                raise ValueError('ifs/ifs_ens is only available from'
+                                 ' dynamical.org for 00Z cycles')
+            else:
+                dataset_id = 'ecmwf-ifs-ens-forecast-15-day-0-25-degree'
+                if model == 'ifs':
+                    ifs_single = True
+        elif model == 'aifs':
+            dataset_id = 'ecmwf-aifs-single-forecast'
+        elif model == 'aifs_ens':
+            dataset_id = 'ecmwf-aifs-ens-forecast'
+
+        # adjust 'member' if needed
+        # if ifs_single, or if model is an ensemble and a member is provided
+        if ifs_single or (member is not None):
+            if ifs_single:
+                if (init_date.tz_localize(None) <
+                        pd.to_datetime('2024-11-12 00:00')):
+                    msg = ('IFS single is not available from dynamical for '
+                           'init dates before 2024-11-12.')
+                    raise ValueError(msg)
+                member = 0
+                model = 'ifs_ens'  # change to ifs_ens, as dynamical doesn't have ifs single
+
+        # translate Herbie search strings from model_input_formatter to lists of dynamical catalog variables
+        mapping_in = {
+            'DSWRF': ['downward_short_wave_radiation_flux_surface'],  # NOAA GHI
+            'VBDSF': ['visible_beam_downward_solar_flux_surface'],  # NOAA HRRR DNI
+            ':TMP:2 m above': ['temperature_2m'],  # NOAA 2m temp
+            '[UV]GRD:10 m above': ['wind_u_10m', 'wind_v_10m'],  # NOAA 10m wind
+            'ssrd': ['downward_short_wave_radiation_flux_surface'],  # IFS/AIFS GHI
+            ':ssrd': ['downward_short_wave_radiation_flux_surface'],  # IFS/AIFS GHI, with the leading ":"
+            '2t': ['temperature_2m'],  # IFS/AIFS 2m temp
+            ':2t': ['temperature_2m'],  # IFS/AIFS 2m temp, with the leading ":"
+            '10[uv]': ['wind_u_10m', 'wind_v_10m'],  # IFS/AIFS 10m wind
+            ':10[uv]': ['wind_u_10m', 'wind_v_10m'],  # IFS/AIFS 10m wind, with the leading ":"
+            '[UV]GRD:80 m above': ['wind_u_80m', 'wind_v_80m'],  # GFS/GEFS
+            '[UV]GRD:100 m above': ['wind_u_100m', 'wind_v_100m'],  # GFS/GEFS
+            'PRES:surface': ['pressure_surface'],  # GFS
+            ':TMP:80 m above': ['temperature_80m'],  # GFS/GEFS
+            'PRES:80 m above': ['pressure_80m'],  # GFS/GEFS
+            ':100[uv]': ['wind_u_100m', 'wind_v_100m'],  # IFS/AIFS
+            ':sp': ['pressure_surface'],  # IFS/AIFS
+            '^(?=.*:ssrd:sfc:)(?:(?!:ssrd:sfc:g).)*$': [
+                'downward_short_wave_radiation_flux_surface'],  # IFS/AIFS ensemble
+            '^(?=.*:2t:sfc:)(?:(?!:2t:sfc:g).)*$': ['temperature_2m'],  # IFS/AIFS ensemble
+            '^(?=.*:10[uv]:)(?:(?!:10[uv]:sfc:g).)*$': [
+                'wind_u_10m', 'wind_v_10m'],  # IFS/AIFS ensemble
+            ':2t:sfc:g': ['temperature_2m'],  # IFS/AIFS 2m temp, filtered from get_ens_temp=False
+            ':10[uv]:sfc:g': ['wind_u_10m', 'wind_v_10m'],  # IFS/AIFS wind, filtered from get_ens_wind=False
+        }
+
+        if resource_type == 'solar':
+            # map dynamical:internal hefty variable names
+            mapping_out = {
+                'downward_short_wave_radiation_flux_surface': 'sdswrf',
+                'visible_beam_downward_solar_flux_surface': 'vbdsf',
+                'temperature_2m': 'temp_air',
+                'wind_speed_10m': 'wind_speed',
+                'wind_direction_10m': 'wind_direction',
+                'ensemble_member': 'number',  # hefty uses "number" to indicate ensemble member
+            }
+        elif resource_type == 'wind':
+            # map dynamical:internal hefty variable names
+            mapping_out = {
+                'wind_speed_10m': 'wind_speed_10m',
+                'wind_speed_80m': 'wind_speed_80m',
+                'wind_speed_100m': 'wind_speed_100m',
+                'wind_direction_10m': 'wind_direction_10m',
+                'wind_direction_80m': 'wind_direction_80m',
+                'wind_direction_100m': 'wind_direction_100m',
+                'temperature_2m': 'temp_air_2m',
+                'temperature_80m': 'temp_air_80m',
+                'pressure_surface': 'pressure_0m',
+                'pressure_80m': 'pressure_80m',
+                'ensemble_member': 'number',  # hefty uses "number" to indicate ensemble member
+            }
+
+        # dynamical variables list
+        # replace each search string value with a list of dynamical variables
+        list1 = [mapping_in.get(a, a) for a in search_string_list]
+        # flatten list of lists
+        dynamical_var_list = [s for list1 in list1 for s in list1]
+
+        # make a locations dataset
+        locations = (pd.DataFrame({
+            'latitude': latitude,
+            'longitude': longitude
+            }).reset_index().rename(columns={'index': 'point'})
+            .set_index('point'))
+        locations_ds = locations[["latitude", "longitude"]].to_xarray()
+
+        # open dataset
+        ds = dynamical_catalog.open(dataset_id=dataset_id, chunks=None)
+
+        # hrrr requires custom coordinates transform
+        if dataset_id in {'noaa-hrrr-forecast-48-hour',
+                          'noaa-hrrr-forecast-18-hour-virtual'}:
+            import cartopy.crs as ccrs
+            # similar to mesowest.utah.edu example,
+            # https://mesowest.utah.edu/html/hrrr/zarr_documentation/html/ex_python_plot_zarr.html
+            # but from
+            # https://github.com/dynamical-org/notebooks/blob/main/noaa-hrrr-forecast-18-hour-virtual.ipynb
+            crs = ds.spatial_ref.attrs
+            hrrr_proj = ccrs.LambertConformal(
+                central_longitude=crs["longitude_of_central_meridian"],
+                central_latitude=crs["latitude_of_projection_origin"],
+                standard_parallels=crs["standard_parallel"],
+                globe=ccrs.Globe(
+                    semimajor_axis=crs["semi_major_axis"],
+                    semiminor_axis=crs["semi_minor_axis"],
+                ),
+            )
+            xyz = hrrr_proj.transform_points(src_crs=ccrs.PlateCarree(),
+                                             x=locations["longitude"],
+                                             y=locations["latitude"])
+            locations['x'], locations['y'], _ = map(list, zip(*xyz))
+            locations_ds = locations[['x', 'y']].to_xarray()
+
+            # get dataarray
+            da = (
+                ds[dynamical_var_list]
+                .sel(init_time=pd.Timestamp(init_date))
+                .sel(x=locations_ds.x,
+                     y=locations_ds.y,
+                     method="nearest")
+                .sel(lead_time=slice(pd.Timedelta(hours=min(fxx_range)),
+                                     pd.Timedelta(hours=max(fxx_range))))
+                .load()
+            )
+        else:
+            locations_ds = locations[["latitude", "longitude"]].to_xarray()
+            if (model in {'gefs', 'ifs_ens', 'aifs_ens'} and
+                    isinstance(member, int)):
+                # get dataarray, only the specified member
+                da = (
+                    ds[dynamical_var_list]
+                    .sel(init_time=pd.Timestamp(init_date))
+                    .sel(latitude=locations_ds.latitude,
+                         longitude=locations_ds.longitude,
+                         method="nearest")
+                    .sel(lead_time=slice(pd.Timedelta(hours=min(fxx_range)),
+                                         pd.Timedelta(hours=max(fxx_range))))
+                    .sel(ensemble_member=member)
+                    .load()
+                )
+            elif ((model in {'gefs', 'ifs_ens', 'aifs_ens'}) and
+                  (member == 'mean')):
+                da = (
+                    ds[dynamical_var_list]
+                    .sel(init_time=pd.Timestamp(init_date))
+                    .sel(latitude=locations_ds.latitude,
+                         longitude=locations_ds.longitude,
+                         method="nearest")
+                    .sel(lead_time=slice(pd.Timedelta(hours=min(fxx_range)),
+                                         pd.Timedelta(hours=max(fxx_range))))
+                    .mean(dim='ensemble_member')
+                    .load()
+                )
+                da['number'] = 'mean'
+            else:
+                # get dataarray
+                da = (
+                    ds[dynamical_var_list]
+                    .sel(init_time=pd.Timestamp(init_date))
+                    .sel(latitude=locations_ds.latitude,
+                         longitude=locations_ds.longitude,
+                         method="nearest")
+                    .sel(lead_time=slice(pd.Timedelta(hours=min(fxx_range)),
+                                         pd.Timedelta(hours=max(fxx_range))))
+                    .load()
+                )
+
+        # convert to dataframe
+        df = da.to_dataframe().reset_index().set_index('valid_time')
+
+        # calculate wind speed and direction
+        if 'wind_u_10m' in df.columns:
+            df['wind_speed_10m'] = np.sqrt(df['wind_v_10m']**2 +
+                                           df['wind_u_10m']**2)
+            df['wind_direction_10m'] = (
+                    (270 - np.rad2deg(
+                        np.arctan2(df['wind_v_10m'],
+                                   df['wind_u_10m']))) % 360
+            )
+        if 'wind_u_80m' in df.columns:
+            df['wind_speed_80m'] = np.sqrt(df['wind_v_80m']**2 +
+                                           df['wind_u_80m']**2)
+            df['wind_direction_80m'] = (
+                    (270 - np.rad2deg(
+                        np.arctan2(df['wind_v_80m'],
+                                   df['wind_u_80m']))) % 360
+            )
+        if 'wind_u_100m' in df.columns:
+            df['wind_speed_100m'] = np.sqrt(df['wind_v_100m']**2 +
+                                            df['wind_u_100m']**2)
+            df['wind_direction_100m'] = (
+                    (270 - np.rad2deg(
+                        np.arctan2(df['wind_v_100m'],
+                                   df['wind_u_100m']))) % 360
+            )
+
+        # dynamical.org temperatures are already in celsius...
+
+        # rename columns to hefty-friendly variable names
+        df = df.rename(columns=mapping_out)
+
+        # add timezone
+        df = df.tz_localize('UTC', level='valid_time')
+
+        # make index valid_time
+        df = df.reset_index().set_index(['valid_time'])
+
+        # calculate lead time in hours
+        df['lead_time'] = df['lead_time'].dt.total_seconds() / 3600
+
+        # filter to columns of interest
+        keep_cols = (list(mapping_out.values()) +
+                     #  ['lead_time', 'latitude', 'longitude'])
+                     ['lead_time', 'point'])
+        df = df[df.columns.intersection(keep_cols)]
+
+    return df
