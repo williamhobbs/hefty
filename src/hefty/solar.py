@@ -302,7 +302,6 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # irradiance that resets every 6 hours
             mixed = df[['sdswrf']].copy()
             mixed['hour'] = mixed.index.hour
-            mixed['hour'] = mixed.index.hour
             mixed['hour_of_mixed_period'] = ((mixed['hour'] - 1) % 6) + 1
             mixed['sdswrf_prev'] = mixed['sdswrf'].shift(
                 periods=1,
@@ -751,7 +750,6 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             # for gfs and gefs ghi: we have to "unmix" the rolling average
             # irradiance that resets every 6 hours
             mixed = df[['sdswrf']].copy()
-            mixed['hour'] = mixed.index.hour
             mixed['hour'] = mixed.index.hour
             mixed['hour_of_mixed_period'] = ((mixed['hour'] - 1) % 6) + 1
             mixed['sdswrf_prev'] = mixed['sdswrf'].shift(
@@ -1787,7 +1785,6 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # for gfs ghi: we have to "unmix" the rolling average
                 # irradiance that resets every 6 hours
                 mixed = df[['sdswrf']].copy()
-                mixed['hour'] = mixed.index.hour
                 mixed['hour'] = mixed.index.hour
                 mixed['hour_of_mixed_period'] = ((mixed['hour'] - 1) % 6) + 1
                 mixed['sdswrf_prev'] = mixed['sdswrf'].shift(
