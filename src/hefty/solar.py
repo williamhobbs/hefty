@@ -228,7 +228,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             ds = xr.load_dataset(download_path_file)
 
         # convert wind
-        ds.herbie.with_wind('speed')
+        ds = ds.herbie.with_wind()
         # rename 'ssrd' to 'sdswrf', 'dsrp' to 'vbdsf'
         ds = ds.rename({'ssrd': 'sdswrf',
                         'dsrp': 'vbdsf'})
@@ -269,6 +269,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         # rename wind speed
         df_temp = df_temp.rename(columns={
             'si10': 'wind_speed',
+            'wdir10': 'wind_direction',
             })
         # convert air temperature units
         df_temp['temp_air'] = df_temp['t2m'] - 273.15
