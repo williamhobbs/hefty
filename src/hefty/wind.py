@@ -3,6 +3,7 @@ import xarray as xr
 from herbie import Herbie
 import time
 from hefty.utilities import model_input_formatter, get_fcast_dataframe
+import warnings
 
 
 def get_wind_forecast(latitude, longitude, init_date, run_length,
@@ -108,12 +109,32 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
     fast = False
     resource_type = 'wind'
 
+    # CHECK INPUTS
+    # check model
+    if model not in {'hrrr', 'gfs', 'gefs', 'ifs', 'ifs_ens',
+                     'aifs', 'aifs_ens', 'cams'}:
+        raise ValueError(f'model="{model}" is not compatible with this'
+                         ' function.')
     # check if init_date is top of hour
     if init_date != init_date.floor('1h'):
         raise ValueError(f'init_date must be on the hour, e.g., '
                          f'{init_date.floor('1h')}, not {init_date}. '
                          'Consider using init_date.floor("1h") or '
                          'similar')
+    # hrrr parameters for models other than hrrr
+    if hrrr_hour_middle is False and model != 'hrrr':
+        warnings.warn(f'You entered hrrr_hour_middle=False, which does not '
+                      f'apply to the model you entered, "{model}". This will '
+                      'not do anything.')
+    if hrrr_coursen_window is not None and model != 'hrrr':
+        warnings.warn(f'You entered hrrr_coursen_window={hrrr_coursen_window},'
+                      f' which does not apply to the model you entered, '
+                      f'"{model}". This will not do anything.')
+    # member but not an ensemble
+    if model not in ['ifs_ens', 'aifs_ens', 'gefs'] and member is not None:
+        warnings.warn(f'You entered member={member} and model={model}, but '
+                      f'{model} is not an ensemble and does not have members.'
+                      f'The input member={member} will be ignored.')
 
     # get model-specific Herbie inputs
     date, fxx_range, product, search_str = model_input_formatter(
