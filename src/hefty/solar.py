@@ -5,6 +5,7 @@ from herbie import Herbie, FastHerbie
 import pvlib
 import time
 from hefty.utilities import model_input_formatter, get_fcast_dataframe
+import warnings
 
 try:
     import cdsapi
@@ -118,10 +119,6 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
        <http://dx.doi.org/10.21105/joss.05994>`_
     """
 
-    if model not in {'hrrr', 'gfs', 'gefs', 'ifs', 'ifs_ens',
-                     'aifs', 'aifs_ens', 'cams'}:
-        raise ValueError(f'model="{model}" is not compatible with this'
-                         ' function.')
     # set clear sky model. could be an input variable at some point
     # model_cs = 'simplified_solis'
     model_cs_kwargs = {
@@ -141,12 +138,48 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
 
+    # CHECK INPUTS
+    # check model
+    if model not in {'hrrr', 'gfs', 'gefs', 'ifs', 'ifs_ens',
+                     'aifs', 'aifs_ens', 'cams'}:
+        raise ValueError(f'model="{model}" is not compatible with this'
+                         ' function.')
     # check if init_date is top of hour
     if init_date != init_date.floor('1h'):
         raise ValueError(f'init_date must be on the hour, e.g., '
                          f'{init_date.floor('1h')}, not {init_date}. '
                          'Consider using init_date.floor("1h") or '
                          'similar')
+    # check decomp for models that don't need it
+    if decomp_model == 'erbs' and model in ['hrrr', 'cams']:
+        warnings.warn(f'model={model} does not require decomposition, but you '
+                      f'entered decomp_model="{decomp_model}". This will not '
+                      'do anything.')
+    # hrrr parameters for models other than hrrr
+    if hrrr_hour_middle is False and model != 'hrrr':
+        warnings.warn(f'You entered hrrr_hour_middle=False, which does not '
+                      f'apply to the model you entered, "{model}". This will '
+                      'not do anything.')
+    if hrrr_coursen_window is not None and model != 'hrrr':
+        warnings.warn(f'You entered hrrr_coursen_window={hrrr_coursen_window},'
+                      f' which does not apply to the model you entered, '
+                      f'"{model}". This will not do anything.')
+    # cams with priority
+    if model == 'cams' and priority is not None:
+        warnings.warn(f'You entered model="cams" and priority={priority}. CAMS'
+                      ' IFS is accessed via CAMS/CDS by default and '
+                      f'the input priority={priority} will be ignored.')
+    # member but not an ensemble
+    if model not in ['ifs_ens', 'aifs_ens', 'gefs'] and member is not None:
+        warnings.warn(f'You entered member={member} and model={model}, but '
+                      f'{model} is not an ensemble and does not have members.'
+                      f'The input member={member} will be ignored.')
+    # provided cams inputs for model not cams
+    if model != 'cams' and ((cams_area is not None) or
+                            (cams_api_key is not None)):
+        warnings.warn(f'You provided an input for one or both of cams_area or '
+                      f'cams_api_key. Those inputs are not used for model='
+                      f'{model} and will be ignored.')
 
     # get model-specific Herbie inputs
     date, fxx_range, product, search_str = model_input_formatter(
@@ -693,10 +726,6 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         <http://dx.doi.org/10.21105/joss.05994>`_
     """
 
-    if model not in {'hrrr', 'gfs', 'gefs', 'ifs', 'ifs_ens',
-                     'aifs', 'aifs_ens'}:
-        raise ValueError(f'model="{model}" is not compatible with this'
-                         ' function.')
     # set clear sky model. could be an input variable at some point
     model_cs = 'simplified_solis'
     model_cs_kwargs = {
@@ -716,12 +745,42 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
 
+    # CHECK INPUTS
+    # check model
+    if model not in {'hrrr', 'gfs', 'gefs', 'ifs', 'ifs_ens',
+                     'aifs', 'aifs_ens', 'cams'}:
+        raise ValueError(f'model="{model}" is not compatible with this'
+                         ' function.')
     # check if init_date is top of hour
     if init_date != init_date.floor('1h'):
         raise ValueError(f'init_date must be on the hour, e.g., '
                          f'{init_date.floor('1h')}, not {init_date}. '
                          'Consider using init_date.floor("1h") or '
                          'similar')
+    # check decomp for models that don't need it
+    if decomp_model == 'erbs' and model in ['hrrr', 'cams']:
+        warnings.warn(f'model={model} does not require decomposition, but you '
+                      f'entered decomp_model="{decomp_model}". This will not '
+                      'do anything.')
+    # hrrr parameters for models other than hrrr
+    if hrrr_hour_middle is False and model != 'hrrr':
+        warnings.warn(f'You entered hrrr_hour_middle=False, which does not '
+                      f'apply to the model you entered, "{model}". This will '
+                      'not do anything.')
+    if hrrr_coursen_window is not None and model != 'hrrr':
+        warnings.warn(f'You entered hrrr_coursen_window={hrrr_coursen_window},'
+                      f' which does not apply to the model you entered, '
+                      f'"{model}". This will not do anything.')
+    # cams with priority
+    if model == 'cams' and priority is not None:
+        warnings.warn(f'You entered model="cams" and priority={priority}. CAMS'
+                      ' IFS is accessed via CAMS/CDS by default and '
+                      f'the input priority={priority} will be ignored.')
+    # member but not an ensemble
+    if model not in ['ifs_ens', 'aifs_ens', 'gefs'] and member is not None:
+        warnings.warn(f'You entered member={member} and model={model}, but '
+                      f'{model} is not an ensemble and does not have members.'
+                      f'The input member={member} will be ignored.')
 
     # get model-specific Herbie inputs
     date, fxx_range, product, search_str = model_input_formatter(
