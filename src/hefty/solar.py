@@ -18,11 +18,11 @@ import tomllib
 
 
 def get_solar_forecast(latitude, longitude, init_date, run_length,
-                       lead_time_to_start=0, model='gfs', member='avg',
-                       attempts=2, hrrr_hour_middle=True,
+                       lead_time_to_start=0, model='gfs', member=None,
+                       attempts=2, hrrr_hour_middle=None,
                        hrrr_coursen_window=None, priority=None,
                        cams_api_key=None, cams_area=None,
-                       decomp_model='dirindex'):
+                       decomp_model=None):
     """
     Get a solar resource forecast for one or several sites from one of several
     NWPs. This function uses Herbie [1]_ and pvlib [2]_.
@@ -60,11 +60,10 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         and a CDS API key to be passed via the 'cams_api_key' parameter.
 
     member: string or int, default 'avg'
-        For models that are ensembles (GEFS is the only current option),
-        pass an appropriate single member label. See Herbie documentation for
-        details [1]_. Options for GEFS include 'avg' or 'mean' (the ensemble
-        mean), 0 or 'c00' (control member), and 1-30 or 'p01'-'p30' for the 30
-        individual members.
+        For models that are ensembles pass an appropriate single member label.
+        See Herbie documentation for details [1]_. Options for GEFS include
+        'avg' or 'mean' (the ensemble mean), 0 or 'c00' (control member), and
+        1-30 or 'p01'-'p30' for the 30 individual members.
 
     attempts : int, optional
         Number of times to try getting forecast data. The function will pause
@@ -151,12 +150,12 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                          'Consider using init_date.floor("1h") or '
                          'similar')
     # check decomp for models that don't need it
-    if decomp_model == 'erbs' and model in ['hrrr', 'cams']:
+    if decomp_model is not None and model in ['hrrr', 'cams']:
         warnings.warn(f'model={model} does not require decomposition, but you '
                       f'entered decomp_model="{decomp_model}". This will not '
                       'do anything.')
     # hrrr parameters for models other than hrrr
-    if hrrr_hour_middle is False and model != 'hrrr':
+    if hrrr_hour_middle is not None and model != 'hrrr':
         warnings.warn(f'You entered hrrr_hour_middle=False, which does not '
                       f'apply to the model you entered, "{model}". This will '
                       'not do anything.')
@@ -180,6 +179,14 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         warnings.warn(f'You provided an input for one or both of cams_area or '
                       f'cams_api_key. Those inputs are not used for model='
                       f'{model} and will be ignored.')
+
+    # fill in defaults as needed
+    if model in ['ifs_ens', 'aifs_ens', 'gefs'] and member is None:
+        member = 'avg'
+    if model == 'hrrr' and hrrr_hour_middle is None:
+        hrrr_hour_middle = True
+    if model not in ['hrrr', 'cams'] and decomp_model is None:
+        decomp_model = 'dirindex'
 
     # get model-specific Herbie inputs
     date, fxx_range, product, search_str = model_input_formatter(
@@ -632,10 +639,10 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
 
 def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
-                            lead_time_to_start=0, model='gfs', member='avg',
-                            attempts=2, hrrr_hour_middle=True,
+                            lead_time_to_start=0, model='gfs', member=None,
+                            attempts=2, hrrr_hour_middle=None,
                             hrrr_coursen_window=None, priority=None,
-                            decomp_model='dirindex'):
+                            decomp_model=None):
     """
     Get a solar resource forecast for one or several sites from one of several
     NWPs. This function uses Herbie [1]_ and pvlib [2]_. This version
@@ -676,11 +683,10 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         :py:func:`hefty.solar.get_solar_forecast`.
 
     member: string or int, default 'avg'
-        For models that are ensembles (GEFS is the only current option),
-        pass an appropriate single member label. See Herbie documentation for
-        details [1]_. Options for GEFS include 'avg' or 'mean' (the ensemble
-        mean), 0 or 'c00' (control member), and 1-30 or 'p01'-'p30' for the 30
-        individual members.
+        For models that are ensembles pass an appropriate single member label.
+        See Herbie documentation for details [1]_. Options for GEFS include
+        'avg' or 'mean' (the ensemble mean), 0 or 'c00' (control member), and
+        1-30 or 'p01'-'p30' for the 30 individual members.
 
     attempts : int, optional
         Number of times to try getting forecast data. The function will pause
@@ -758,12 +764,12 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                          'Consider using init_date.floor("1h") or '
                          'similar')
     # check decomp for models that don't need it
-    if decomp_model == 'erbs' and model in ['hrrr', 'cams']:
+    if decomp_model is not None and model in ['hrrr', 'cams']:
         warnings.warn(f'model={model} does not require decomposition, but you '
                       f'entered decomp_model="{decomp_model}". This will not '
                       'do anything.')
     # hrrr parameters for models other than hrrr
-    if hrrr_hour_middle is False and model != 'hrrr':
+    if hrrr_hour_middle is not None and model != 'hrrr':
         warnings.warn(f'You entered hrrr_hour_middle=False, which does not '
                       f'apply to the model you entered, "{model}". This will '
                       'not do anything.')
@@ -781,6 +787,14 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         warnings.warn(f'You entered member={member} and model={model}, but '
                       f'{model} is not an ensemble and does not have members.'
                       f'The input member={member} will be ignored.')
+
+    # fill in defaults as needed
+    if model in ['ifs_ens', 'aifs_ens', 'gefs'] and member is None:
+        member = 'avg'
+    if model == 'hrrr' and hrrr_hour_middle is None:
+        hrrr_hour_middle = True
+    if model not in ['hrrr', 'cams'] and decomp_model is None:
+        decomp_model = 'dirindex'
 
     # get model-specific Herbie inputs
     date, fxx_range, product, search_str = model_input_formatter(

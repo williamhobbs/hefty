@@ -7,8 +7,8 @@ import warnings
 
 
 def get_wind_forecast(latitude, longitude, init_date, run_length,
-                      lead_time_to_start=0, model='gfs', member='avg',
-                      attempts=2, hrrr_hour_middle=True,
+                      lead_time_to_start=0, model='gfs', member=None,
+                      attempts=2, hrrr_hour_middle=None,
                       hrrr_coursen_window=None, priority=None):
     """
     Get a wind resource forecast for one or several sites from one of several
@@ -49,11 +49,10 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
         speed.
 
     member: string or int, default 'avg'
-        For models that are ensembles (GEFS is the only current option),
-        pass an appropriate single member label. See Herbie documentation for
-        details [1]_. Options for GEFS include 'avg' or 'mean' (the ensemble
-        mean), 0 or 'c00' (control member), and 1-30 or 'p01'-'p30' for the 30
-        individual members.
+        For models that are ensembles pass an appropriate single member label.
+        See Herbie documentation for details [1]_. Options for GEFS include
+        'avg' or 'mean' (the ensemble mean), 0 or 'c00' (control member), and
+        1-30 or 'p01'-'p30' for the 30 individual members.
 
     attempts : int, optional
         Number of times to try getting forecast data. The function will pause
@@ -135,6 +134,12 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
         warnings.warn(f'You entered member={member} and model={model}, but '
                       f'{model} is not an ensemble and does not have members.'
                       f'The input member={member} will be ignored.')
+
+    # fill in defaults as needed
+    if model in ['ifs_ens', 'aifs_ens', 'gefs'] and member is None:
+        member = 'avg'
+    if model == 'hrrr' and hrrr_hour_middle is None:
+        hrrr_hour_middle = True
 
     # get model-specific Herbie inputs
     date, fxx_range, product, search_str = model_input_formatter(
