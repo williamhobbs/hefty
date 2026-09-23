@@ -2,12 +2,13 @@ import pandas as pd
 import xarray as xr
 from herbie import Herbie
 import time
-from hefty.utilities import model_input_formatter
+from hefty.utilities import model_input_formatter, get_fcast_dataframe
+import warnings
 
 
 def get_wind_forecast(latitude, longitude, init_date, run_length,
-                      lead_time_to_start=0, model='gfs', member='avg',
-                      attempts=2, hrrr_hour_middle=True,
+                      lead_time_to_start=0, model='gfs', member=None,
+                      attempts=2, hrrr_hour_middle=None,
                       hrrr_coursen_window=None, priority=None):
     """
     Get a wind resource forecast for one or several sites from one of several
@@ -48,11 +49,10 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
         speed.
 
     member: string or int, default 'avg'
-        For models that are ensembles (GEFS is the only current option),
-        pass an appropriate single member label. See Herbie documentation for
-        details [1]_. Options for GEFS include 'avg' or 'mean' (the ensemble
-        mean), 0 or 'c00' (control member), and 1-30 or 'p01'-'p30' for the 30
-        individual members.
+        For models that are ensembles pass an appropriate single member label.
+        See Herbie documentation for details [1]_. Options for GEFS include
+        'avg' or 'mean' (the ensemble mean), 0 or 'c00' (control member), and
+        1-30 or 'p01'-'p30' for the 30 individual members.
 
     attempts : int, optional
         Number of times to try getting forecast data. The function will pause
@@ -101,213 +101,55 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
     if type(latitude) is float or type(latitude) is int:
         latitude = [latitude]
         longitude = [longitude]
+    num_sites = len(latitude)
     # convert init_date to datetime
     init_date = pd.to_datetime(init_date)
 
+    fast = False
+    resource_type = 'wind'
+
+    # CHECK INPUTS
+    # check model
+    if model not in {'hrrr', 'gfs', 'gefs', 'ifs', 'ifs_ens',
+                     'aifs', 'aifs_ens', 'cams'}:
+        raise ValueError(f'model="{model}" is not compatible with this'
+                         ' function.')
     # check if init_date is top of hour
     if init_date != init_date.floor('1h'):
         raise ValueError(f'init_date must be on the hour, e.g., '
                          f'{init_date.floor('1h')}, not {init_date}. '
                          'Consider using init_date.floor("1h") or '
                          'similar')
+    # hrrr parameters for models other than hrrr
+    if hrrr_hour_middle is False and model != 'hrrr':
+        warnings.warn(f'You entered hrrr_hour_middle=False, which does not '
+                      f'apply to the model you entered, "{model}". This will '
+                      'not do anything.')
+    if hrrr_coursen_window is not None and model != 'hrrr':
+        warnings.warn(f'You entered hrrr_coursen_window={hrrr_coursen_window},'
+                      f' which does not apply to the model you entered, '
+                      f'"{model}". This will not do anything.')
+    # member but not an ensemble
+    if model not in ['ifs_ens', 'aifs_ens', 'gefs'] and member is not None:
+        warnings.warn(f'You entered member={member} and model={model}, but '
+                      f'{model} is not an ensemble and does not have members.'
+                      f'The input member={member} will be ignored.')
+
+    # fill in defaults as needed
+    if model in ['ifs_ens', 'aifs_ens', 'gefs'] and member is None:
+        member = 'avg'
+    if model == 'hrrr' and hrrr_hour_middle is None:
+        hrrr_hour_middle = True
 
     # get model-specific Herbie inputs
     date, fxx_range, product, search_str = model_input_formatter(
-        init_date, run_length, lead_time_to_start, model, resource_type='wind')
+        init_date, run_length, lead_time_to_start, model, resource_type)
 
-    i = []
-    for fxx in fxx_range:
-        # get solar, 10m wind, and 2m temp data
-        # try n times based loosely on
-        # https://thingspython.wordpress.com/2021/12/05/how-to-try-something-n-times-in-python/
-        for attempts_remaining in reversed(range(attempts)):
-            attempt_num = attempts - attempts_remaining
-            try:
-                if attempt_num == 1:
-                    # try downloading
-                    ds = Herbie(
-                        date,
-                        model=model,
-                        product=product,
-                        fxx=fxx,
-                        member=member,
-                        priority=priority
-                        ).xarray(search_str)
-                else:
-                    # after first attempt, set overwrite=True to overwrite
-                    # partial files
-                    ds = Herbie(
-                        date,
-                        model=model,
-                        product=product,
-                        fxx=fxx,
-                        member=member,
-                        priority=priority
-                        ).xarray(search_str, overwrite=True)
-            except Exception as e:
-                print(e)
-                if attempts_remaining:
-                    print('attempt ' + str(attempt_num) + ' failed, pause for '
-                          + str((attempt_num)**2) + ' min')
-                    time.sleep(60*(attempt_num)**2)
-                else:
-                    raise ValueError(f'download failed, ran out of '
-                                        f'attempts with error: {e}')
-            else:
-                break
-
-        # merge - override avoids hight conflict between 2m temp and 10m wind
-        ds = xr.merge(ds, compat='override')
-
-        # addresses GH#41, https://github.com/blaylockbk/Herbie/issues/533
-        # check to see if an older version of eccodes (<=2.44.0) is being used
-        # if it is, for gfs and gefs, variables 'u100' and 'v100' will be in
-        # the dataset. if not (meaning eccodes>=2.45.0), manually rename those
-        # variables before merging.
-        old_eccodes = True
-        if model == 'gfs' or model == 'gefs':
-            ds_var_list = [i for i in ds.data_vars]
-            if 'u100' not in ds_var_list:
-                old_eccodes = False
-                ds100 = (ds.sel(heightAboveGround=100)[['u', 'v']].
-                         rename_vars({'u': 'u100', 'v': 'v100'}))
-                ds80 = (ds.sel(heightAboveGround=80)[['u', 'v']].
-                        rename_vars({'u': 'u80', 'v': 'v80'}))
-                ds = xr.merge([ds.drop_vars(['u', 'v']), ds100, ds80],
-                              compat='override')
-
-        # calculate wind speed from u and v components
-        ds = ds.herbie.with_wind('both')
-
-        if model == 'hrrr' and hrrr_coursen_window is not None:
-            ds = ds.coarsen(x=hrrr_coursen_window,
-                            y=hrrr_coursen_window,
-                            boundary='trim').mean()
-
-        # use pick_points for single point or list of points
-        i.append(
-            ds.herbie.pick_points(
-                pd.DataFrame(
-                    {
-                        "latitude": latitude,
-                        "longitude": longitude,
-                    }
-                )
-            )
-        )
-    ts = xr.concat(i, dim="valid_time")  # concatenate
-
-    # convert to dataframe, convert names and units
-    # variable names for gfs and gefs will now be different depending on
-    # the eccodes version and possible renaming above.
-    if old_eccodes:
-        if model == 'gfs':
-            df_temp = ts.to_dataframe()[
-                ['si10',
-                 'ws',
-                 'si100',
-                 'wdir10',
-                 'wdir',
-                 'wdir100',
-                 't2m',  # could be removed
-                 't',
-                 'sp',  # could be removed
-                 'pres']
-                ]
-            df_temp['t2m'] = df_temp['t2m'] - 273.15
-            df_temp['t'] = df_temp['t'] - 273.15
-            df_temp.rename(columns={
-                'si10': 'wind_speed_10m',
-                'ws': 'wind_speed_80m',
-                'si100': 'wind_speed_100m',
-                'wdir10': 'wind_direction_10m',
-                'wdir': 'wind_direction_80m',
-                'wdir100': 'wind_direction_100m',
-                't2m': 'temp_air_2m',  # could be removed
-                't': 'temp_air_80m',
-                'sp': 'pressure_0m',  # could be removed
-                'pres': 'pressure_80m',
-                }, inplace=True)
-        elif model == 'gefs':
-            df_temp = ts.to_dataframe()[
-                ['ws', 'si100', 'wdir', 'wdir100', 't', 'pres']
-                ]
-            df_temp['t'] = df_temp['t'] - 273.15
-            df_temp.rename(columns={
-                'ws': 'wind_speed_80m',
-                'si100': 'wind_speed_100m',
-                'wdir': 'wind_direction_80m',
-                'wdir100': 'wind_direction_100m',
-                't': 'temp_air_80m',
-                'pres': 'pressure_80m',
-                }, inplace=True)
-    else:
-        if model == 'gfs':
-            df_temp = ts.to_dataframe()[
-                ['si10',
-                 'si80',
-                 'si100',
-                 'wdir10',
-                 'wdir80',
-                 'wdir100',
-                 't2m',  # could be removed
-                 't',
-                 'sp',  # could be removed
-                 'pres']
-                ]
-            df_temp['t2m'] = df_temp['t2m'] - 273.15
-            df_temp['t'] = df_temp['t'] - 273.15
-            df_temp.rename(columns={
-                'si10': 'wind_speed_10m',
-                'si80': 'wind_speed_80m',
-                'si100': 'wind_speed_100m',
-                'wdir10': 'wind_direction_10m',
-                'wdir80': 'wind_direction_80m',
-                'wdir100': 'wind_direction_100m',
-                't2m': 'temp_air_2m',  # could be removed
-                't': 'temp_air_80m',
-                'sp': 'pressure_0m',  # could be removed
-                'pres': 'pressure_80m',
-                }, inplace=True)
-        elif model == 'gefs':
-            df_temp = ts.to_dataframe()[
-                ['si80', 'si100', 'wdir80', 'wdir100', 't', 'pres']
-                ]
-            df_temp['t'] = df_temp['t'] - 273.15
-            df_temp.rename(columns={
-                'si80': 'wind_speed_80m',
-                'si100': 'wind_speed_100m',
-                'wdir80': 'wind_direction_80m',
-                'wdir100': 'wind_direction_100m',
-                't': 'temp_air_80m',
-                'pres': 'pressure_80m',
-                }, inplace=True)
-    if model == 'hrrr':
-        df_temp = ts.to_dataframe()[
-            ['si10', 'ws', 'wdir10', 'wdir', 't2m', 'sp']
-            ]
-        df_temp['t2m'] = df_temp['t2m'] - 273.15
-        df_temp.rename(columns={
-            'si10': 'wind_speed_10m',
-            'ws': 'wind_speed_80m',
-            'wdir10': 'wind_direction_10m',
-            'wdir': 'wind_direction_80m',
-            't2m': 'temp_air_2m',
-            'sp': 'pressure_0m',
-            }, inplace=True)
-    elif model == 'ifs' or model == 'aifs':
-        df_temp = ts.to_dataframe()[
-            ['si10', 'si100', 'wdir10', 'wdir100', 't2m', 'sp']
-            ]
-        df_temp['t2m'] = df_temp['t2m'] - 273.15
-        df_temp.rename(columns={
-            'si10': 'wind_speed_10m',
-            'si100': 'wind_speed_100m',
-            'wdir10': 'wind_direction_10m',
-            'wdir100': 'wind_direction_100m',
-            't2m': 'temp_air_2m',
-            'sp': 'pressure_0m',
-            }, inplace=True)
+    df_temp = get_fcast_dataframe(
+        latitude, longitude, date, fxx_range, model,
+        search_str, priority, product,
+        fast, attempts, resource_type,
+        member, hrrr_coursen_window=hrrr_coursen_window)
 
     # work through sites
     dfs = {}  # empty list of dataframes
@@ -317,22 +159,22 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
         num_sites = len(latitude)
 
     for j in range(num_sites):
-        df = df_temp[df_temp.index.get_level_values('point') == j]
-        df = df.droplevel('point')
+        df = df_temp[df_temp['point'] == j]
+        df = df.drop(['point'], axis=1)  # drop point column, we will add it back later
 
         if model == 'hrrr' and hrrr_hour_middle is False:
             # keep top of hour instantaneous HRRR convention
             dfs[j] = df
         else:
             # 60min version of data, centered at bottom of the hour
-            # 1min interpolation, then 60min mean
-            df_60min = (
-                df
-                .resample('1min')
-                .interpolate()
-                .resample('60min').mean()
-            )
-            df_60min.index = df_60min.index + pd.Timedelta('30min')
+            new_index = pd.date_range(df.index.min(),
+                                      df.index.max(),
+                                      freq='30min',
+                                      name='valid_time')
+            df_interp = df.reindex(
+                new_index).interpolate(method='time')
+            df_60min = df_interp[df_interp.index.minute == 30]
+
             dfs[j] = df_60min
 
     # concatenate creating multiindex with keys of the list of point numbers
@@ -343,10 +185,6 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
         .sort_index(level='valid_time')
     )
 
-    # set "point" index as a column
     df_60min = df_60min.reset_index().set_index('valid_time')
-
-    # drop unneeded columns if they exist
-    # df_60min = df_60min.drop(['t2m', 'sdswrf'], axis=1, errors='ignore')
 
     return df_60min

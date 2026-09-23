@@ -110,6 +110,7 @@ The [examples](examples) folder contains several example Jupyter notebooks.
 - [ensemble_example.ipynb](examples/ensemble_example.ipynb): Examples of multi-member ensembles with IFS, AIFS, and GEFS.
 - [wind_example.ipynb](examples/wind_example.ipynb): A basic wind resource forecast example using a few models, including converting the data to a format compatible with `windpowerlib`*.
 - [erbs_vs_dirindex.ipynb](examples/erbs_vs_dirindex.ipynb): A comparison of Erbs and DIRINDEX irradiance decomposition models using SURFRAD measurements.
+- [dynamical_example.ipynb](examples\dynamical_example.ipynb): Examples using [dynamical.org](https://dynamical.org) as a data source (`priority`), which can be about 10X faster than other options, but with just a few limitations. 
 
 \* https://github.com/wind-python/windpowerlib/
 
@@ -121,6 +122,8 @@ compatible model cycles. In general, `run_length + lead_time_to_start` must
 fit inside the listed span for the selected cycle. Use
 `adjust_forecast_datetimes()` to select an initialization time and lead-time
 combination that satisfies cycle-specific limits. Note that these forecast model schedules/features can change over time, and the `get_fcast_definition` function in `hefty.utilities` is intended to record these changes.
+
+>Note that [dynamical.org](https://dynamical.org) (when using `priority='dynamical'`) does not currently have all initialization times and historical data for all models, and `get_fcast_definition` and `adjust_forecast_datetimes()` do not yet account for this. See [dynamical_example.ipynb](examples/dynamical_example.ipynb), the table in [Issue #64](https://github.com/williamhobbs/hefty/issues/64#issuecomment-4939703931), and https://dynamical.org/catalog/ for more info.
 
 | Model | Forecast type | Function support | Cycles | Available forecast span | Forecast-hour steps |
 | --- | --- | --- | --- | --- | --- |
