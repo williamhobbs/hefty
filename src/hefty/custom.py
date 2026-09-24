@@ -9,7 +9,7 @@ def get_custom_forecast(latitude, longitude, init_date, run_length,
                         lead_time_to_start=0, period=3, model='gfs',
                         product='pgrb2.0p25', search_str=':TMP:2 m above',
                         member='avg', attempts=2, hrrr_hour_middle=True,
-                        hrrr_coursen_window=None, priority=None):
+                        hrrr_coarsen_window=None, priority=None):
     """
     Get a custom forecast for one or several sites from one of several
     NWPs. This function uses Herbie [1]_.
@@ -63,7 +63,7 @@ def get_custom_forecast(latitude, longitude, init_date, run_length,
         integrated hourly forecast that is centered in the middle of the
         hour.
 
-    hrrr_coursen_window : int or None, default None
+    hrrr_coarsen_window : int or None, default None
         If model is 'hrrr', optional setting that is the x and y window size
         for coarsening the xarray dataset, effectively applying spatial
         smoothing to the HRRR model. The HRRR has a native resolution of
@@ -145,9 +145,9 @@ def get_custom_forecast(latitude, longitude, init_date, run_length,
         # calculate wind speed from u and v components
         ds = ds.herbie.with_wind('both')
 
-        if model == 'hrrr' and hrrr_coursen_window is not None:
-            ds = ds.coarsen(x=hrrr_coursen_window,
-                            y=hrrr_coursen_window,
+        if model == 'hrrr' and hrrr_coarsen_window is not None:
+            ds = ds.coarsen(x=hrrr_coarsen_window,
+                            y=hrrr_coarsen_window,
                             boundary='trim').mean()
 
         # use pick_points for single point or list of points
