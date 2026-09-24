@@ -914,7 +914,7 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
 
 def _fastherbie_downloader(latitude, longitude, init_date, resource_type,
                            model, fxx_range, FH, search_string_list,
-                           ds_dict, j, hrrr_coursen_window,
+                           ds_dict, j, hrrr_coarsen_window,
                            overwrite=False):
     # try downloading
     FH.download(search_string_list[j])
@@ -957,10 +957,10 @@ def _fastherbie_downloader(latitude, longitude, init_date, resource_type,
                 print(msg)
                 raise ValueError(msg)
     # coarsen hrrr if needed
-    if model == 'hrrr' and hrrr_coursen_window is not None:
+    if model == 'hrrr' and hrrr_coarsen_window is not None:
         ds_dict[j] = ds_dict[j].coarsen(
-            x=hrrr_coursen_window,
-            y=hrrr_coursen_window,
+            x=hrrr_coarsen_window,
+            y=hrrr_coarsen_window,
             boundary='trim').mean()
     # reduce to points
     ds_dict[j] = ds_dict[j].herbie.pick_points(pd.DataFrame({
@@ -980,7 +980,7 @@ def _fastherbie_downloader(latitude, longitude, init_date, resource_type,
 
 def _herbie_downloader(latitude, longitude, init_date, resource_type,
                        model, product, fxx, member, priority, search_str,
-                       hrrr_coursen_window, overwrite=False):
+                       hrrr_coarsen_window, overwrite=False):
     search_string_list = search_str.split('|')
     num_datasets = len(search_string_list)
     if resource_type == 'solar':
@@ -1029,10 +1029,10 @@ def _herbie_downloader(latitude, longitude, init_date, resource_type,
                               compat='override')
 
     # coarsen hrrr if needed
-    if model == 'hrrr' and hrrr_coursen_window is not None:
+    if model == 'hrrr' and hrrr_coarsen_window is not None:
         ds = ds.coarsen(
-            x=hrrr_coursen_window,
-            y=hrrr_coursen_window,
+            x=hrrr_coarsen_window,
+            y=hrrr_coarsen_window,
             boundary='trim').mean()
 
     # reduce to points
@@ -1060,7 +1060,7 @@ def get_fcast_dataframe(
         latitude, longitude, init_date, fxx_range, model,
         search_str, priority, product=None,
         fast=False, attempts=2, resource_type='solar',
-        member=None, hrrr_coursen_window=None):
+        member=None, hrrr_coarsen_window=None):
     """
     Function to return a dataframe of forecasted resource data.
 
@@ -1126,7 +1126,7 @@ def get_fcast_dataframe(
         not available for 'ifs_ens' vie Herbie (i.e., priority other than
         'dynamical').
 
-    hrrr_coursen_window : int or None, default None
+    hrrr_coarsen_window : int or None, default None
         If model is 'hrrr', optional setting that is the x and y window size
         for coarsening the xarray dataset, effectively applying spatial
         smoothing to the HRRR model. The HRRR has a native resolution of
@@ -1218,7 +1218,7 @@ def get_fcast_dataframe(
                         ds_dict, ds = _fastherbie_downloader(
                             latitude, longitude, init_date, resource_type,
                             model_herbie, fxx_range, FH, search_string_list,
-                            ds_dict, j, hrrr_coursen_window,
+                            ds_dict, j, hrrr_coarsen_window,
                             overwrite=False)
                     else:
                         # after first attempt, set overwrite=True to overwrite
@@ -1226,7 +1226,7 @@ def get_fcast_dataframe(
                         ds_dict, ds = _fastherbie_downloader(
                             latitude, longitude, init_date, resource_type,
                             model_herbie, fxx_range, FH, search_string_list,
-                            ds_dict, j, hrrr_coursen_window,
+                            ds_dict, j, hrrr_coarsen_window,
                             overwrite=True)
                 except Exception as e:
                     print(e)
@@ -1253,12 +1253,12 @@ def get_fcast_dataframe(
                         ds = _herbie_downloader(
                             latitude, longitude, init_date, resource_type,
                             model_herbie, product, fxx, member, priority,
-                            search_str, hrrr_coursen_window, overwrite=False)
+                            search_str, hrrr_coarsen_window, overwrite=False)
                     else:
                         ds = _herbie_downloader(
                             latitude, longitude, init_date, resource_type,
                             model_herbie, product, fxx, member, priority,
-                            search_str, hrrr_coursen_window, overwrite=True)
+                            search_str, hrrr_coarsen_window, overwrite=True)
                 except Exception as e:
                     print(e)
                     if attempts_remaining:
@@ -1344,9 +1344,9 @@ def get_fcast_dataframe(
                 "`dynamical_catalog` and `cartopy` are required to use "
                 "priority='dynamical'. Please install these, e.g., with "
                 "`pip install dynamical_catalog cartopy`."))
-        if hrrr_coursen_window is not None:
+        if hrrr_coarsen_window is not None:
             raise ValueError(
-                "hrrr_coursen_window option is not"
+                "hrrr_coarsen_window option is not"
                 " currently available with priority='dynamical'")
         ifs_single = False
         if model == 'hrrr':
