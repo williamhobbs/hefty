@@ -20,7 +20,7 @@ import tomllib
 def get_solar_forecast(latitude, longitude, init_date, run_length,
                        lead_time_to_start=0, model='gfs', member=None,
                        attempts=2, hrrr_hour_middle=None,
-                       hrrr_coarsen_window=None, priority=None,
+                       hrrr_coursen_window=None, priority=None,
                        cams_api_key=None, cams_area=None,
                        decomp_model=None):
     """
@@ -77,7 +77,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         integrated hourly forecast that is centered in the middle of the
         hour.
 
-    hrrr_coarsen_window : int or None, default None
+    hrrr_coursen_window : int or None, default None
         If model is 'hrrr', optional setting that is the x and y window size
         for coarsening the xarray dataset, effectively applying spatial
         smoothing to the HRRR model. The HRRR has a native resolution of
@@ -159,8 +159,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         warnings.warn(f'You entered hrrr_hour_middle=False, which does not '
                       f'apply to the model you entered, "{model}". This will '
                       'not do anything.')
-    if hrrr_coarsen_window is not None and model != 'hrrr':
-        warnings.warn(f'You entered hrrr_coarsen_window={hrrr_coarsen_window},'
+    if hrrr_coursen_window is not None and model != 'hrrr':
+        warnings.warn(f'You entered hrrr_coursen_window={hrrr_coursen_window},'
                       f' which does not apply to the model you entered, '
                       f'"{model}". This will not do anything.')
     # cams with priority
@@ -201,7 +201,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             fast=False, attempts=attempts,
             resource_type='solar',
             member=member,
-            hrrr_coarsen_window=hrrr_coarsen_window,)
+            hrrr_coursen_window=hrrr_coursen_window,)
 
     elif model == 'cams':
         if not _has_cdsapi:
@@ -641,7 +641,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                             lead_time_to_start=0, model='gfs', member=None,
                             attempts=2, hrrr_hour_middle=None,
-                            hrrr_coarsen_window=None, priority=None,
+                            hrrr_coursen_window=None, priority=None,
                             decomp_model=None):
     """
     Get a solar resource forecast for one or several sites from one of several
@@ -700,7 +700,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         integrated hourly forecast that is centered in the middle of the
         hour.
 
-    hrrr_coarsen_window : int or None, default None
+    hrrr_coursen_window : int or None, default None
         If model is 'hrrr', optional setting that is the x and y window size
         for coarsening the xarray dataset, effectively applying spatial
         smoothing to the HRRR model. The HRRR has a native resolution of
@@ -773,8 +773,8 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         warnings.warn(f'You entered hrrr_hour_middle=False, which does not '
                       f'apply to the model you entered, "{model}". This will '
                       'not do anything.')
-    if hrrr_coarsen_window is not None and model != 'hrrr':
-        warnings.warn(f'You entered hrrr_coarsen_window={hrrr_coarsen_window},'
+    if hrrr_coursen_window is not None and model != 'hrrr':
+        warnings.warn(f'You entered hrrr_coursen_window={hrrr_coursen_window},'
                       f' which does not apply to the model you entered, '
                       f'"{model}". This will not do anything.')
     # cams with priority
@@ -806,7 +806,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         search_str, priority, product=product,
         fast=True, attempts=attempts,
         resource_type='solar',
-        member=member, hrrr_coarsen_window=hrrr_coarsen_window,
+        member=member, hrrr_coursen_window=hrrr_coursen_window,
     )
 
     # work through sites
