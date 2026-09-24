@@ -9,7 +9,7 @@ import warnings
 def get_wind_forecast(latitude, longitude, init_date, run_length,
                       lead_time_to_start=0, model='gfs', member=None,
                       attempts=2, hrrr_hour_middle=None,
-                      hrrr_coursen_window=None, priority=None):
+                      hrrr_coarsen_window=None, priority=None):
     """
     Get a wind resource forecast for one or several sites from one of several
     NWPs. This function uses Herbie [1]_ and pvlib [2]_.
@@ -66,7 +66,7 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
         integrated hourly forecast that is centered in the middle of the
         hour.
 
-    hrrr_coursen_window : int or None, default None
+    hrrr_coarsen_window : int or None, default None
         If model is 'hrrr', optional setting that is the x and y window size
         for coarsening the xarray dataset, effectively applying spatial
         smoothing to the HRRR model. The HRRR has a native resolution of
@@ -125,8 +125,8 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
         warnings.warn(f'You entered hrrr_hour_middle=False, which does not '
                       f'apply to the model you entered, "{model}". This will '
                       'not do anything.')
-    if hrrr_coursen_window is not None and model != 'hrrr':
-        warnings.warn(f'You entered hrrr_coursen_window={hrrr_coursen_window},'
+    if hrrr_coarsen_window is not None and model != 'hrrr':
+        warnings.warn(f'You entered hrrr_coarsen_window={hrrr_coarsen_window},'
                       f' which does not apply to the model you entered, '
                       f'"{model}". This will not do anything.')
     # member but not an ensemble
@@ -149,7 +149,7 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
         latitude, longitude, date, fxx_range, model,
         search_str, priority, product,
         fast, attempts, resource_type,
-        member, hrrr_coursen_window=hrrr_coursen_window)
+        member, hrrr_coarsen_window=hrrr_coarsen_window)
 
     # work through sites
     dfs = {}  # empty list of dataframes
