@@ -14,7 +14,7 @@ except ImportError:
 else:
     _has_cdsapi = True
 import os
-import tomllib
+from herbie import config
 
 
 def get_solar_forecast(latitude, longitude, init_date, run_length,
@@ -208,19 +208,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             raise ImportError(('cdsapi is required to use cams, '
                                'e.g., with `pip install cdsapi`.'))
         # directory path for saving cams files
-        # check to see if a custom herbie config path has been set
-        if os.environ.get('HERBIE_CONFIG_PATH') is not None:
-            herbie_config_path = os.environ['HERBIE_CONFIG_PATH']
-        else:
-            # otherwise, use default herbie config path
-            herbie_config_path = os.path.join(
-                os.path.expanduser('~'), '.config', 'herbie', 'config.toml')
-
-        with open(herbie_config_path, "rb") as f:
-            config_data = tomllib.load(f)
-        # use 'cams' subfolder
-        cams_dir_path = os.path.join(config_data['default']['save_dir'],
-                                     'cams')
+        cams_dir_path = os.path.join(config['default']['save_dir'], 'cams')
         # if cams folder doesn't exist, make it
         if not os.path.exists(cams_dir_path):
             os.makedirs(cams_dir_path)
