@@ -1,7 +1,7 @@
 
 import pytest
 # from .conftest import assert_series_equal, assert_frame_equal
-from numpy.testing import assert_allclose
+# from numpy.testing import assert_allclose
 import pandas as pd
 
 from hefty.utilities import model_input_formatter
