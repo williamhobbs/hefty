@@ -7,8 +7,10 @@ from hefty.wind import get_wind_forecast
 
 # ignore xarray FutureWarnings (see https://github.com/blaylockbk/Herbie/issues/525).
 # ignore grib file removal warnings
-@pytest.mark.filterwarnings('ignore:.*Will not remove GRIB.*')
-@pytest.mark.filterwarnings('ignore:.*In a future version.*')
+pytestmark = [
+    pytest.mark.filterwarnings('ignore:.*Will not remove GRIB.*'),
+    pytest.mark.filterwarnings('ignore:.*In a future version.*')
+]
 
 
 def test_hrrr():
