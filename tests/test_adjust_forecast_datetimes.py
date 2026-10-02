@@ -20,7 +20,7 @@ def test_tz_warning():
 
 
 def test_hrrr_too_far():
-    available_date = '2026-09-24 02:00'
+    available_date = '2026-09-24 02:00+00:00'
     run_length_needed = 43
     lead_time_to_start_needed = 1
     model = 'hrrr'
@@ -32,7 +32,7 @@ def test_hrrr_too_far():
 
 
 def test_gfs_way_too_far():
-    available_date = '2026-09-24 00:00'
+    available_date = '2026-09-24 00:00+00:00'
     run_length_needed = 385
     lead_time_to_start_needed = 0
     model = 'gfs'
