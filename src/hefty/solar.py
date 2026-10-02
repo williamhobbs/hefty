@@ -346,7 +346,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             unmixed = ((mixed['hour_of_mixed_period'] * mixed['sdswrf']
                         - (mixed['hour_of_mixed_period'] - mixed['int_len'])
                         * mixed['sdswrf_prev']) / mixed['int_len'])
-            df['ghi'] = unmixed
+            # clip to avoid occasional small negative ghi in GEFS, see GH #35
+            df['ghi'] = unmixed.clip(lower=0)
 
         elif model in {'ifs', 'ifs_ens', 'aifs', 'aifs_ens', 'cams'}:
             # for ifs ghi: cumulative J/m^s to average W/m^2 over the interval
@@ -407,7 +408,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             df['ghi_csi'] = df['ghi'] / df['ghi_clear']
 
             # avoid divide by zero issues
-            df.loc[df['ghi'] == 0, 'ghi_csi'] = 0
+            df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
 
             # 60min version of data, centered at bottom of the hour
             new_index = pd.date_range(df.index.min(),
@@ -828,7 +829,8 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             unmixed = ((mixed['hour_of_mixed_period'] * mixed['sdswrf']
                         - (mixed['hour_of_mixed_period'] - mixed['int_len'])
                         * mixed['sdswrf_prev']) / mixed['int_len'])
-            df['ghi'] = unmixed
+            # clip to avoid occasional small negative ghi in GEFS, see GH #35
+            df['ghi'] = unmixed.clip(lower=0)
 
         elif model in ['ifs', 'ifs_ens', 'aifs', 'aifs_ens']:
             # for ifs ghi: cumulative J/m^s to average W/m^2 over the interval
@@ -879,7 +881,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             df['ghi_csi'] = df['ghi'] / df['ghi_clear']
 
             # avoid divide by zero issues
-            df.loc[df['ghi'] == 0, 'ghi_csi'] = 0
+            df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
 
             # 60min version of data, centered at bottom of the hour
             new_index = pd.date_range(df.index.min(),
@@ -1268,7 +1270,7 @@ def get_solar_forecast_ensemble_subset(
             df['ghi_csi'] = df['ghi'] / df['ghi_clear']
 
             # avoid divide by zero issues
-            df.loc[df['ghi'] == 0, 'ghi_csi'] = 0
+            df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
 
             # make a dummy column
             df['dummy'] = 0
@@ -1729,7 +1731,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 df['ghi_csi'] = df['ghi'] / df['ghi_clear']
 
                 # avoid divide by zero issues
-                df.loc[df['ghi'] == 0, 'ghi_csi'] = 0
+                df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
 
                 # 60min version of data, centered at bottom of the hour
                 new_index = pd.date_range(df.index.min(),
@@ -1869,7 +1871,8 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 unmixed = ((mixed['hour_of_mixed_period'] * mixed['sdswrf']
                            - (mixed['hour_of_mixed_period'] - mixed['int_len'])
                            * mixed['sdswrf_prev']) / mixed['int_len'])
-                df['ghi'] = unmixed
+                # clip to avoid occasional small negative ghi in GEFS, see GH #35
+                df['ghi'] = unmixed.clip(lower=0)
 
                 # make 1min interval clear sky data covering our time range
                 times = pd.date_range(
@@ -1905,7 +1908,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 df['ghi_csi'] = df['ghi'] / df['ghi_clear']
 
                 # avoid divide by zero issues
-                df.loc[df['ghi'] == 0, 'ghi_csi'] = 0
+                df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
 
                 # 60min version of data, centered at bottom of the hour
                 new_index = pd.date_range(df.index.min(),
