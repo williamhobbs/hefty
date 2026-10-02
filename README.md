@@ -31,20 +31,26 @@ _*CAMS IFS is only available via `hefty.solar.get_solar_forecast()`, and it requ
 
 A virtual environment is strongly recommended. You can install from PyPi with:
 
-```
+```bash
 pip install hefty
 ```
 
 To run the example Jupyter notebooks, you also need `jupyter`:
 
-```
+```bash
 pip install jupyter
 ```
 
-If you want to use ECMWF CAMS, you also need `cdsapi` (and an API key, see https://ads.atmosphere.copernicus.eu/how-to-api):
+If you want to use ECMWF CAMS, you also need `cdsapi` (and an API key, see https://ads.atmosphere.copernicus.eu/how-to-api), which the `cams` extra installs:
 
+```bash
+pip install "hefty[cams]"
 ```
-pip install cdsapi
+
+If you want to use [dynamical.org](https://dynamical.org) as a data source (`priority='dynamical'`), you also need `dynamical-catalog` and `cartopy`, which the `dynamical` extra installs:
+
+```bash
+pip install "hefty[dynamical]"
 ```
 
 ## Quick example
@@ -157,7 +163,7 @@ As a simplified example, assume a model:
 
 See the diagram below. If the current time is 07:00 UTC, and you want a forecast that covers 10:00 to 13:00 UTC, that's a desired lead time of 3 hr and a desired run length of 3 hours. Because the 06Z initialization time model run outputs will not be available until after 10:30, you will need to use the 00Z model outputs. And to get forecasted values that cover hours beginning 10:00-12:00 UTC, hefty will need to access the 9-, 12-, and 15-hour ahead outputs (labeled `f09`-`f15` below) from the 00Z forecast, which will be interpolated to hourly and will include the hours of interest.  
 
-```
+```text
                                                  Current time
                                                       |
                                                       ↓----lead time---→|====run length===|
@@ -192,7 +198,7 @@ print(f'lead_time_to_start: {lead_time_to_start}')
 ```
  with output
 
- ```
+ ```text
 init_date: 2026-04-23 00:00:00+00:00
 run_length: 6
 lead_time_to_start: 9
@@ -213,7 +219,7 @@ hefty uses the directory configured by Herbie for storing files. See Herbie docu
 ### GRIB file issues
 GRIB files can occasionally download with missing/incomplete artifacts. This has been known to cause errors like:
 
-```
+```text
 TypeError: objects must be an iterable containing only DataTree(s), Dataset(s), DataArray(s), and dictionaries: ['t2m']
 ```
 

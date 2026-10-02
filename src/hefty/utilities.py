@@ -381,6 +381,18 @@ def adjust_forecast_datetimes(available_date, run_length_needed,
     lead_time_to_start : int
         Number of hours from the ``init_date`` to the first interval needed in
         the forecast.
+
+    Examples
+    --------
+    >>> init_date, run_length, lead_time_to_start = adjust_forecast_datetimes(
+    ...     available_date='2026-04-23 07:00+00:00',
+    ...     run_length_needed=3,
+    ...     lead_time_to_start_needed=3,
+    ...     model='gefs')
+    >>> init_date
+    Timestamp('2026-04-23 00:00:00+0000', tz='UTC')
+    >>> run_length, lead_time_to_start
+    (6, 9)
     """
 
     # convert to pandas datetime

@@ -22,11 +22,21 @@ dependencies = [
     "herbie-data[scikit-learn] >= 2026.9.2",
     "pvlib >= 0.16.1",
     "pandas >= 3.0.0",
+    "numpy",
+    "xarray",
     "urllib3 >= 2.6.0",
 ]
 license = "BSD-3-Clause"
 license-files = ["LICENSE*"]
 
+[project.optional-dependencies]
+cams = ["cdsapi"]
+dynamical = ["dynamical-catalog", "cartopy"]
+
 [project.urls]
 Homepage = "https://github.com/williamhobbs/hefty"
 Issues = "https://github.com/williamhobbs/hefty/issues"
+
+[tool.deptry.per_rule_ignores]
+# urllib3 is not imported directly; it is a floor pin for intermittent SSL errors (see README)
+DEP002 = ["urllib3"]
