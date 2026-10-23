@@ -1480,7 +1480,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                 lead_time_to_start=0, model='ifs_ens',
                                 attempts=2, priority=None,
                                 get_ens_temp=False, get_ens_wind=False,
-                                decomp_model='dirindex'):
+                                decomp_model='dirindex', interval=60):
     """
     Get solar resource forecasts for one or several sites using all ensemble
     members. Using `get_solar_forecast_ensemble_subset` may be fast for a
@@ -1548,6 +1548,12 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
 
     decomp_model : string, default 'dirindex'
         Decomposition model to use. Options include 'dirindex' and 'erbs'.
+
+    interval : numeric, default 60
+        Interval length, in minutes, of intermediate solar calculations and
+        the output interval. Default is 60, but shorter intervals (e.g., 5)
+        could provide benefit due to improved accuracy in decomposition, at
+        the expense of longer computation times.
 
     Returns
     -------
@@ -1686,22 +1692,22 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 **model_cs_kwargs
             )
 
-            # make 60min interval clear sky, centered at bottom of the hour
-            times_60min = pd.date_range(
-                start=df.index[0]+pd.Timedelta('30m'),
-                end=df.index[-1]-pd.Timedelta('30m'),
-                freq='60min',
+            # make longer interval clear sky, centered at bottom of the interval
+            times_n_min = pd.date_range(
+                start=df.index[0]+pd.Timedelta(interval/2, 'min'),
+                end=df.index[-1]-pd.Timedelta(interval/2, 'min'),
+                freq=f'{interval}min',
                 tz='UTC')
 
             # calculate clear sky ghi with pvlib
-            sp_60min = pvlib.solarposition.ephemeris(
-                times_60min,
+            sp_n_min = pvlib.solarposition.ephemeris(
+                times_n_min,
                 loc.latitude,
                 loc.longitude
             )
-            apparent_elevation_60min = sp_60min['apparent_elevation']
-            cs_60min = pvlib.clearsky.simplified_solis(
-                apparent_elevation_60min,
+            apparent_elevation_n_min = sp_n_min['apparent_elevation']
+            cs_n_min = pvlib.clearsky.simplified_solis(
+                apparent_elevation_n_min,
                 **model_cs_kwargs
             )
 
@@ -1733,22 +1739,22 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # avoid divide by zero issues
                 df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
 
-                # 60min version of data, centered at bottom of the hour
+                # n-min version of data, centered at bottom of the hour
                 new_index = pd.date_range(df.index.min(),
                                           df.index.max(),
-                                          freq='30min',
+                                          freq=f'{interval/2}min',
                                           name='valid_time')
                 cols = ['temp_air', 'wind_speed', 'wind_direction',
                         'lead_time']
                 df_interp = df[cols].reindex(
                     new_index).interpolate(method='time')
-                df_60min = df_interp[df_interp.index.minute == 30]
+                df_n_min = df_interp.iloc[1::2]
 
                 # "backfill" ghi csi
-                # merge based on nearest index from 60min version looking
+                # merge based on nearest index from n-min version looking
                 # forward in 3hr version
-                df_60min = pd.merge_asof(
-                    left=df_60min,
+                df_n_min = pd.merge_asof(
+                    left=df_n_min,
                     right=df[['ghi_csi']],
                     on='valid_time',
                     direction='forward'
@@ -1756,47 +1762,47 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
 
                 # calculate ghi from clear sky and backfilled forecasted clear
                 # sky index
-                df_60min['ghi'] = cs_60min['ghi'] * df_60min['ghi_csi']
+                df_n_min['ghi'] = cs_n_min['ghi'] * df_n_min['ghi_csi']
 
                 # decompose
                 if decomp_model == 'erbs':
                     out_erbs = pvlib.irradiance.erbs(
-                        df_60min['ghi'],
-                        sp_60min['zenith'],
-                        df_60min.index,
+                        df_n_min['ghi'],
+                        sp_n_min['zenith'],
+                        df_n_min.index,
                     )
-                    df_60min['dni'] = out_erbs['dni']
-                    df_60min['dhi'] = out_erbs['dhi']
+                    df_n_min['dni'] = out_erbs['dni']
+                    df_n_min['dhi'] = out_erbs['dhi']
                 elif decomp_model == 'dirindex':
-                    cs_decomp = cs_60min  # could later use another cs model
+                    cs_decomp = cs_n_min  # could later use another cs model
                     decomp = pvlib.irradiance.dirindex(
-                        ghi=df_60min['ghi'],
+                        ghi=df_n_min['ghi'],
                         ghi_clear=cs_decomp['ghi'],
                         dni_clear=cs_decomp['dni'],
-                        zenith=sp_60min['zenith'],
-                        times=times_60min,
+                        zenith=sp_n_min['zenith'],
+                        times=times_n_min,
                     )
-                    df_60min['dni'] = decomp.fillna(0)
+                    df_n_min['dni'] = decomp.fillna(0)
                     cos_zenith = np.maximum(
-                        np.cos(np.deg2rad(sp_60min['apparent_zenith'])),
+                        np.cos(np.deg2rad(sp_n_min['apparent_zenith'])),
                         min_cos_zenith
                     )
-                    df_60min['dhi'] = (df_60min['ghi'] -
-                                       (df_60min['dni'] * cos_zenith))
+                    df_n_min['dhi'] = (df_n_min['ghi'] -
+                                       (df_n_min['dni'] * cos_zenith))
 
                 # add clearsky ghi
-                df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
+                df_n_min['ghi_clear'] = df_n_min['ghi'] / df_n_min['ghi_csi']
 
                 # add member number and point, drop dummy column
-                df_60min['member'] = number
-                df_60min['point'] = point
+                df_n_min['member'] = number
+                df_n_min['point'] = point
 
                 # append
-                dfs.append(df_60min)
+                dfs.append(df_n_min)
 
         # convert to dataframe
-        df_60min_irr = pd.concat(dfs)
-        df_60min = df_60min_irr.copy()
+        df_n_min_irr = pd.concat(dfs)
+        df_n_min = df_n_min_irr.copy()
 
     else:  # model == 'gefs':
         # list of GEFS ensemble members, e.g., 'p01', 'p02', etc.
@@ -1910,32 +1916,32 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # avoid divide by zero issues
                 df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
 
-                # 60min version of data, centered at bottom of the hour
+                # n_min version of data, centered at bottom of the hour
                 new_index = pd.date_range(df.index.min(),
                                           df.index.max(),
-                                          freq='30min',
+                                          freq=f'{interval/2}min',
                                           name='valid_time')
                 cols = ['temp_air', 'wind_speed', 'wind_direction',
                         'lead_time']
                 df_interp = df[cols].reindex(
                     new_index).interpolate(method='time')
-                df_60min = df_interp[df_interp.index.minute == 30]
+                df_n_min = df_interp.iloc[1::2]
 
                 # "backfill" ghi csi
-                # merge based on nearest index from 60min version looking
+                # merge based on nearest index from _n_min version looking
                 # forward in 3hr version
-                df_60min = pd.merge_asof(
-                    left=df_60min,
+                df_n_min = pd.merge_asof(
+                    left=df__n_min,
                     right=df[['ghi_csi']],
                     on='valid_time',
                     direction='forward'
                 ).set_index('valid_time')
 
-                # make 60min interval clear sky, centered at bottom of the hour
+                # make n_min interval clear sky, centered at bottom of the hour
                 times = pd.date_range(
-                    start=df.index[0]+pd.Timedelta('30m'),
-                    end=df.index[-1]-pd.Timedelta('30m'),
-                    freq='60min',
+                    start=df.index[0]+pd.Timedelta(interval/2, 'min'),
+                    end=df.index[-1]-pd.Timedelta(interval/2, 'min'),
+                    freq=f'{interval}min',
                     tz='UTC')
 
                 # calculate clear sky ghi with pvlib
@@ -1952,49 +1958,49 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
 
                 # calculate ghi from clear sky and backfilled forecasted clear
                 # sky index
-                df_60min['ghi'] = cs['ghi'] * df_60min['ghi_csi']
+                df_n_min['ghi'] = cs['ghi'] * df_n_min['ghi_csi']
 
                 # clip to avoid occasional small negative ghi in GEFS, GH #35
-                df_60min['ghi'] = df_60min['ghi'].clip(lower=0)
+                df_n_min['ghi'] = df_n_min['ghi'].clip(lower=0)
 
                 # decompose
                 if decomp_model == 'erbs':
                     out_erbs = pvlib.irradiance.erbs(
-                        df_60min['ghi'],
+                        df_n_min['ghi'],
                         sp['zenith'],
-                        df_60min.index,
+                        df_n_min.index,
                     )
-                    df_60min['dni'] = out_erbs['dni']
-                    df_60min['dhi'] = out_erbs['dhi']
+                    df_n_min['dni'] = out_erbs['dni']
+                    df_n_min['dhi'] = out_erbs['dhi']
                 elif decomp_model == 'dirindex':
                     cs_decomp = cs  # could later use a different cs model...
                     decomp = pvlib.irradiance.dirindex(
-                        ghi=df_60min['ghi'],
+                        ghi=df_n_min['ghi'],
                         ghi_clear=cs_decomp['ghi'],
                         dni_clear=cs_decomp['dni'],
                         zenith=sp['zenith'],
                         times=times,
                     )
-                    df_60min['dni'] = decomp.fillna(0)
+                    df_n_min['dni'] = decomp.fillna(0)
                     cos_zenith = np.maximum(
                         np.cos(np.deg2rad(sp['apparent_zenith'])),
                         min_cos_zenith
                     )
-                    df_60min['dhi'] = (df_60min['ghi'] -
-                                       (df_60min['dni'] * cos_zenith))
+                    df_n_min['dhi'] = (df_n_min['ghi'] -
+                                       (df_n_min['dni'] * cos_zenith))
 
                 # add clearsky ghi
-                df_60min['ghi_clear'] = df_60min['ghi'] / df_60min['ghi_csi']
+                df_n_min['ghi_clear'] = df_n_min['ghi'] / df_n_min['ghi_csi']
 
                 # add member number and point, drop dummy column
-                df_60min['member'] = x+1
-                df_60min['point'] = point
+                df_n_min['member'] = x+1
+                df_n_min['point'] = point
 
                 # append
-                dfs.append(df_60min)
+                dfs.append(df_n_min)
 
         # convert to dataframe
-        df_60min_irr = pd.concat(dfs)
-        df_60min = df_60min_irr.copy()
+        df_n_min_irr = pd.concat(dfs)
+        df_n_min = df_n_min_irr.copy()
 
-    return df_60min
+    return df_n_min
