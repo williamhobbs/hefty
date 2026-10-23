@@ -17,6 +17,197 @@ import os
 from herbie import config
 
 
+def sunrise_sunset_adv(elevation, times, threshold=-0.8333):
+    """
+    Estimate sunrise and/or sunset times within a solar elevation
+    timeseries.
+
+    Uses linear interpolation to estimate times where the sun crosses
+    a threshold angle that defines sunrise/sunset.
+
+    Based on [1]_.
+
+    Parameters
+    ----------
+    elevation : array-like or pd.Series
+        Solar elevation angle in degrees. Typically true (not
+        refraction-corrected) elavation, but it should match the
+        convention used for ``threshold``.
+
+    times : pd.DatetimeIndex
+        Times corresponding to solar elevation values. If ``times``
+        is timezone-aware, then the output will use the same
+        timezone.
+
+    threshold : numeric, default -0.8333
+        Threshold elevation angle in degrees that defines sunrise/
+        sunset. -0.8333 is the typical true (not refreaction-
+        corrected) angle used.
+
+    Returns
+    -------
+    out : pd.DataFrame
+        Contains columns ``'time'`` for the time of sunrise/sunset,
+        ``'direction'`` for the direction ('rise' or 'set'), and
+        ``'time_before'`` and ``'time_after'`` for the input times that
+        were before and after the sunrise/set event. Timezones will
+        match the timezone of input ``times``, if it includes a
+        timezone.
+
+    References
+    ----------
+    .. [1] https://stackoverflow.com/a/10619525. Posted by dailyglen,
+       modified by community. See post 'Timeline' for change history.
+       Retrieved 2026-07-24, License - CC BY-SA 3.0.
+    """
+
+    if isinstance(elevation, pd.Series):
+        elevation = elevation.values
+
+    tz = times.tz
+
+    # Find if values are above or below yvalue crossing:
+    day = elevation > threshold
+    night = np.logical_not(day)
+    left_shifted_day = day[1:]
+    left_shifted_night = night[1:]
+
+    rising = left_shifted_day & night[0:-1]
+    setting = left_shifted_night & day[0:-1]
+    idxs_rising = np.where(rising)[0]
+    idxs_setting = np.where(setting)[0]
+
+    # Calculate x crossings with interpolation using formula for a line:
+    x1_r = times.values[idxs_rising]
+    x2_r = times.values[idxs_rising+1]
+    y1_r = elevation[idxs_rising]
+    y2_r = elevation[idxs_rising+1]
+    rise_times = (threshold-y1_r)*(x2_r-x1_r)/(y2_r-y1_r) + x1_r
+
+    x1_s = times.values[idxs_setting]
+    x2_s = times.values[idxs_setting+1]
+    y1_s = elevation[idxs_setting]
+    y2_s = elevation[idxs_setting+1]
+    set_times = (threshold-y1_s)*(x2_s-x1_s)/(y2_s-y1_s) + x1_s
+
+    df_rise = pd.DataFrame({
+        'time': pd.DatetimeIndex(rise_times, tz=tz),
+        'direction': 'rise',
+        'time_before': pd.DatetimeIndex(x1_r, tz=tz),
+        'time_after': pd.DatetimeIndex(x2_r, tz=tz)
+    })
+
+    df_set = pd.DataFrame({
+        'time': pd.DatetimeIndex(set_times, tz=tz),
+        'direction': 'set',
+        'time_before': pd.DatetimeIndex(x1_s, tz=tz),
+        'time_after': pd.DatetimeIndex(x2_s, tz=tz)
+    })
+
+    out = pd.concat([df_rise, df_set]).sort_values('time')
+
+    return out
+
+
+def sunrise_sunset_helper(elevation, times, threshold=-0.8333):
+    """
+    Helper function to deal with sunrise/sunset in interval-average
+    data, calculating center-of-daytime-interval solar position and
+    the fraction of the interval during which the sun was up.
+
+    Uses linear interpolation to estimate times where the sun crosses
+    a threshold angle that defines sunrise/sunset.
+
+    Based on [1]_.
+
+    Parameters
+    ----------
+    elevation : array-like or pd.Series
+        Solar elevation angle in degrees. Typically true (not
+        refraction-corrected) elavation, but it should match the
+        convention used for ``threshold``.
+
+    times : pd.DatetimeIndex
+        Times corresponding to solar elevation values. If ``times``
+        is timezone-aware, then the output will use the same
+        timezone. Must be evenly spaced.
+
+    threshold : numeric, default -0.8333
+        Threshold elevation angle in degrees that defines sunrise/
+        sunset. -0.8333 is the typical true (not refreaction-
+        corrected) angle used. 
+
+    Returns
+    -------
+    out : pd.DataFrame
+        Index matching input ``'times'``, with columns ``'elevation'``
+        (matching input ``'elevation'``), ``'daytime_centered_time'``
+        for the time at the center of the interval after accounting
+        for sunrise/sunset, and ``'sunup'`` for the fraction of the
+        interval during which the sun is up.
+
+    References
+    ----------
+    .. [1] https://stackoverflow.com/a/10619525. Posted by dailyglen,
+       modified by community. See post 'Timeline' for change history.
+       Retrieved 2026-07-24, License - CC BY-SA 3.0.
+    """
+    # find sunrise/sunset times
+    rise_set_times = sunrise_sunset_adv(elevation, times, threshold)
+
+    # calculate frequency, make a dataframe
+    freq = times.inferred_freq
+    # add a "1" to the freq if needed
+    # (to address https://github.com/pandas-dev/pandas/issues/36769)
+    freq = freq if freq[0].isdecimal() else '1' + freq
+    half_freq = pd.to_timedelta(freq)/2
+    # half frequency timedelta
+    hftd = pd.Timedelta(half_freq)
+    times.freq = freq
+    # interval_start = times - pd.Timedelta(half_freq)
+    # interval_end = times + pd.Timedelta(half_freq)
+    data = {
+        'elevation': elevation,
+        # 'interval_start': interval_start,
+        # 'interval_end': interval_end,
+    }
+    df = pd.DataFrame(data, index=times)
+
+    # calculate nearest original time to each sunrise/set event by
+    # adding half an interval, rounding to the interval, then
+    # subtracting half an interval.
+    rise_set_times['nearest_time'] = (
+        (rise_set_times['time']+hftd).dt.round(freq))-hftd
+
+    # match with the index in df.
+    df['event'] = times.map(
+        rise_set_times.set_index('nearest_time')['direction'])
+    df['event_time'] = times.map(
+        rise_set_times.set_index('nearest_time')['time'])
+
+    # calculate fraction o finterval with sunup
+    df.loc[df['elevation'] > threshold, 'sunup'] = 1
+    df.loc[df['elevation'] <= threshold, 'sunup'] = 0
+    df.loc[df['event']=='set', 'sunup'] = (
+        df['event_time'] - (df.index - hftd)) / pd.Timedelta(freq)
+    df.loc[df['event']=='rise', 'sunup'] = (
+        (df.index + hftd) - df['event_time']) / pd.Timedelta(freq)
+
+    # make a daytime-centered time column
+    df['time'] = df.index
+    # for sunrise
+    df.loc[df['event']=='rise', 'daytime_centered_time'] = df['event_time'] + ((df.index + pd.Timedelta(half_freq)) - df['event_time']) / 2
+    # sunset
+    df.loc[df['event']=='set', 'daytime_centered_time'] = df['event_time'] - (df['event_time'] - (df.index - pd.Timedelta(half_freq))) / 2
+    # fill the rest
+    df['daytime_centered_time'] = df['daytime_centered_time'].fillna(df['time'])
+
+    # make output
+    out = df[['elevation', 'daytime_centered_time', 'sunup']]
+
+    return out
+
+
 def get_solar_forecast(latitude, longitude, init_date, run_length,
                        lead_time_to_start=0, model='gfs', member=None,
                        attempts=2, hrrr_hour_middle=None,
@@ -1705,6 +1896,34 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 **model_cs_kwargs
             )
 
+            # scale based on sunrise/set time and fraction of the hour the sun
+            # was up. see:
+            # https://gist.github.com/williamhobbs/83d8db79b31ff0986a0ab4d5c5ed70d0
+            out = sunrise_sunset_helper(
+                elevation=sp_60min['elevation'],
+                times=times_60min,
+                threshold=-0.8333)
+            # new times for solar position, accounting for sunrise/sunset
+            # have to convert to datetimeindex...
+            times_mean_new = pd.DatetimeIndex(out['daytime_centered_time'])
+            # solar position w/ new times
+            sp_60min = pvlib.solarposition.ephemeris(
+                times_mean_new,
+                loc.latitude,
+                loc.longitude
+            )
+            # get hourly clearsky using the new times
+            apparent_elevation_60min = sp_60min['apparent_elevation']
+            cs_60min = pvlib.clearsky.simplified_solis(
+                apparent_elevation_60min,
+                **model_cs_kwargs
+            )
+            # cs_60min.index = times_60min
+            # sp_60min.index = times_60min
+            out = out.reset_index().set_index('daytime_centered_time')
+            # scale the clearsky values by the sunup fraction
+            cs_60min = cs_60min.mul(out['sunup'], axis=0)
+
             for number in member_list:
                 df = df_temp[(df_temp['point'] == point) &
                              (df_temp['number'] == number)].copy()
@@ -1754,6 +1973,9 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                     direction='forward'
                 ).set_index('valid_time')
 
+                # set index to middle of sunup interval
+                df_60min.index = cs_60min.index
+
                 # calculate ghi from clear sky and backfilled forecasted clear
                 # sky index
                 df_60min['ghi'] = cs_60min['ghi'] * df_60min['ghi_csi']
@@ -1774,7 +1996,8 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                         ghi_clear=cs_decomp['ghi'],
                         dni_clear=cs_decomp['dni'],
                         zenith=sp_60min['zenith'],
-                        times=times_60min,
+                        # times=times_60min,
+                        times=df_60min.index
                     )
                     df_60min['dni'] = decomp.fillna(0)
                     cos_zenith = np.maximum(
@@ -1790,6 +2013,13 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # add member number and point, drop dummy column
                 df_60min['member'] = number
                 df_60min['point'] = point
+
+                # scale based on sunup fraction
+                df_60min['dni'] = df_60min['dni'].mul(out['sunup'], axis=0)
+                df_60min['dhi'] = df_60min['dhi'].mul(out['sunup'], axis=0)
+                # set index back to middle of interval
+                df_60min.index = times_60min
+                df_60min.index.name = 'valid_time'
 
                 # append
                 dfs.append(df_60min)
