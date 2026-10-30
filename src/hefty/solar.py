@@ -1931,7 +1931,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # merge based on nearest index from _n_min version looking
                 # forward in 3hr version
                 df_n_min = pd.merge_asof(
-                    left=df__n_min,
+                    left=df_n_min,
                     right=df[['ghi_csi']],
                     on='valid_time',
                     direction='forward'
