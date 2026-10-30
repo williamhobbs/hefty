@@ -722,7 +722,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
     """
 
     # set clear sky model. could be an input variable at some point
-    model_cs = 'simplified_solis'
+    # model_cs = 'simplified_solis'
     model_cs_kwargs = {
         'aod700': 0.05,
         'precipitable_water': 0.5,
@@ -1692,7 +1692,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 **model_cs_kwargs
             )
 
-            # make longer interval clear sky, centered at bottom of the interval
+            # longer interval clear sky, centered at bottom of the interval
             times_n_min = pd.date_range(
                 start=df.index[0]+pd.Timedelta(interval/2, 'min'),
                 end=df.index[-1]-pd.Timedelta(interval/2, 'min'),
