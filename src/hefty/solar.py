@@ -1739,7 +1739,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # avoid divide by zero issues
                 df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
 
-                # n-min version of data, centered at bottom of the hour
+                # n-min version of data, centered at bottom of the interval
                 new_index = pd.date_range(df.index.min(),
                                           df.index.max(),
                                           freq=f'{interval/2}min',
@@ -1877,7 +1877,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 unmixed = ((mixed['hour_of_mixed_period'] * mixed['sdswrf']
                            - (mixed['hour_of_mixed_period'] - mixed['int_len'])
                            * mixed['sdswrf_prev']) / mixed['int_len'])
-                # clip to avoid occasional small negative ghi in GEFS, see GH #35
+                # clip to avoid occasional small negative ghi, see GH #35
                 df['ghi'] = unmixed.clip(lower=0)
 
                 # make 1min interval clear sky data covering our time range
@@ -1916,7 +1916,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # avoid divide by zero issues
                 df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
 
-                # n_min version of data, centered at bottom of the hour
+                # n_min version of data, centered at bottom of the interval
                 new_index = pd.date_range(df.index.min(),
                                           df.index.max(),
                                           freq=f'{interval/2}min',
@@ -1937,7 +1937,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                     direction='forward'
                 ).set_index('valid_time')
 
-                # make n_min interval clear sky, centered at bottom of the hour
+                # n_min interval clear sky, centered at bottom of the interval
                 times = pd.date_range(
                     start=df.index[0]+pd.Timedelta(interval/2, 'min'),
                     end=df.index[-1]-pd.Timedelta(interval/2, 'min'),
