@@ -533,16 +533,22 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             df_n_min = df_interp.iloc[1::2]
 
             if interval < 60:
-                # calculate average CS ghi/dni over the intervals from the forecast
-                # based on list comprehension example in
+                # calculate average CS ghi/dni over the intervals from the
+                # forecast based on list comprehension example in
                 # https://stackoverflow.com/a/55724134/27574852
                 dates = df.index
                 ghi_clear = [
-                    cs_1min['ghi'].loc[(cs_1min['ghi'].index > dates[i]) & (cs_1min['ghi'].index <= dates[i+1])]
+                    cs_1min['ghi'].loc[
+                        (cs_1min['ghi'].index > dates[i]) &
+                        (cs_1min['ghi'].index <= dates[i+1])
+                        ]
                     .mean() for i in range(len(dates) - 1)
                     ]
                 dni_clear = [
-                    cs_1min['dni'].loc[(cs_1min['dni'].index > dates[i]) & (cs_1min['dni'].index <= dates[i+1])]
+                    cs_1min['dni'].loc[
+                        (cs_1min['dni'].index > dates[i]) &
+                        (cs_1min['dni'].index <= dates[i+1])
+                        ]
                     .mean() for i in range(len(dates) - 1)
                     ]
 
@@ -571,21 +577,26 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 df['direct_horiz_clear_csi'] = (df['direct_horiz_clear'] /
                                                 direct_horiz_clear)
                 # avoid divide by zero issues
-                df.loc[df['direct_horiz_clear'] == 0, 'direct_horiz_clear_csi'] = 0
+                df.loc[df['direct_horiz_clear'] == 0,
+                       'direct_horiz_clear_csi'] = 0
 
                 # "backfill" csi values
                 df_n_min = pd.merge_asof(
                     left=df_n_min,
-                    right=df[['ghi_csi', 'dni_csi', 'ghi_clear_nwp_csi', 'direct_horiz_clear_csi']],
+                    right=df[
+                        ['ghi_csi', 'dni_csi', 'ghi_clear_nwp_csi',
+                         'direct_horiz_clear_csi']],
                     direction='forward', right_index=True, left_index=True
                 )
 
                 df_n_min['ghi'] = df_n_min['ghi_csi'] * cs_n_min['ghi']
                 df_n_min['dni'] = df_n_min['dni_csi'] * cs_n_min['dni']
-                df_n_min['direct_horiz_clear'] = df_n_min['direct_horiz_clear_csi'] * cs_n_min['direct_horiz']
+                df_n_min['direct_horiz_clear'] = (df_n_min[
+                    'direct_horiz_clear_csi'] * cs_n_min['direct_horiz'])
                 df_n_min['dni_clear'] = (df_n_min['direct_horiz_clear'] /
                                          cos_zenith_n_min)
-                df_n_min['ghi_clear_nwp'] = df_n_min['ghi_clear_nwp_csi'] * cs_n_min['ghi']
+                df_n_min['ghi_clear_nwp'] = (df_n_min['ghi_clear_nwp_csi'] *
+                                             cs_n_min['ghi'])
 
                 # calculate dhi from ghi, dni, solar position
                 df_n_min['dhi'] = (df_n_min['ghi'] -
@@ -624,7 +635,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
         elif model == 'hrrr':
             if hrrr_hour_middle is True:
-                # clear sky index at the top of the hour (hrrr is instantaneous)
+                # clear sky index at top of the hour, hrrr is instantaneous
                 times = df.index
                 sp = pvlib.solarposition.ephemeris(
                     times,
@@ -655,7 +666,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 # calculate n-min averages centered labeled at bottom of the
                 # interval
                 df_n_min = df_01min.resample(f'{interval}min').mean()
-                df_n_min.index = df_n_min.index + pd.Timedelta(f'{interval/2}min')
+                df_n_min.index = (df_n_min.index +
+                                  pd.Timedelta(f'{interval/2}min'))
                 # calculate new ghi
                 df_n_min['ghi'] = df_n_min['ghi_csi'] * df_n_min['ghi_clear']
                 df_n_min['dni'] = df_n_min['dni_csi'] * df_n_min['dni_clear']
