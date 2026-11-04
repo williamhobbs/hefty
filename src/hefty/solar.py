@@ -431,23 +431,28 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             ).set_index('valid_time')
 
             # make n-min interval clear sky centered at bottom of the interval
-            times_n_min = pd.date_range(
-                start=df.index[0]+pd.Timedelta(interval/2, 'min'),
-                end=df.index[-1]-pd.Timedelta(interval/2, 'min'),
-                freq=f'{interval}min',
-                tz='UTC')
+            if interval == 1:
+                times_n_min = times_1min
+                sp_n_min = sp_1min
+                cs_n_min = cs_1min
+            else:
+                times_n_min = pd.date_range(
+                    start=df.index[0]+pd.Timedelta(interval/2, 'min'),
+                    end=df.index[-1]-pd.Timedelta(interval/2, 'min'),
+                    freq=f'{interval}min',
+                    tz='UTC')
 
-            # calculate clear sky ghi with pvlib
-            sp_n_min = pvlib.solarposition.ephemeris(
-                times_n_min,
-                loc.latitude,
-                loc.longitude
-            )
-            apparent_elevation_n_min = sp_n_min['apparent_elevation']
-            cs_n_min = pvlib.clearsky.simplified_solis(
-                apparent_elevation_n_min,
-                **model_cs_kwargs
-            )
+                # calculate clear sky ghi with pvlib
+                sp_n_min = pvlib.solarposition.ephemeris(
+                    times_n_min,
+                    loc.latitude,
+                    loc.longitude
+                )
+                apparent_elevation_n_min = sp_n_min['apparent_elevation']
+                cs_n_min = pvlib.clearsky.simplified_solis(
+                    apparent_elevation_n_min,
+                    **model_cs_kwargs
+                )
 
             # calculate ghi from clear sky and backfilled forecasted clear sky
             # index
@@ -488,10 +493,34 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             dfs[j] = df_n_min
 
         elif model == 'cams':
-            # TODO: 
-            # - convert direct_horiz_clear to n-min interval
-            # - ??
+            # make n-min interval clear sky centered at bottom of the interval
+            if interval == 1:
+                times_n_min = times_1min
+                sp_n_min = sp_1min
+                cs_n_min = cs_1min
+            else:
+                times_n_min = pd.date_range(
+                    start=df.index[0]+pd.Timedelta(interval/2, 'min'),
+                    end=df.index[-1]-pd.Timedelta(interval/2, 'min'),
+                    freq=f'{interval}min',
+                    tz='UTC')
 
+                # calculate clear sky ghi with pvlib
+                sp_n_min = pvlib.solarposition.ephemeris(
+                    times_n_min,
+                    loc.latitude,
+                    loc.longitude
+                )
+                apparent_elevation_n_min = sp_n_min['apparent_elevation']
+                cs_n_min = pvlib.clearsky.simplified_solis(
+                    apparent_elevation_n_min,
+                    **model_cs_kwargs
+                )
+            # calculate clear sky direct horizontal irr
+            cos_zenith_n_min = np.maximum(
+                np.cos(np.deg2rad(sp_n_min['apparent_zenith'])),
+                min_cos_zenith)
+            cs_n_min['direct_horiz'] = (cs_n_min['dni'] * cos_zenith_n_min)
             # n-min version of data, centered at bottom of the interval
             new_index = pd.date_range(df.index.min(),
                                       df.index.max(),
@@ -503,25 +532,86 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 new_index).interpolate(method='time')
             df_n_min = df_interp.iloc[1::2]
 
-            # adjust timestamps to center of interval
-            df.index = df.index - pd.Timedelta('30min')
+            if interval < 60:
+                # calculate average CS ghi/dni over the intervals from the forecast
+                # based on list comprehension example in
+                # https://stackoverflow.com/a/55724134/27574852
+                dates = df.index
+                ghi_clear = [
+                    cs_1min['ghi'].loc[(cs_1min['ghi'].index > dates[i]) & (cs_1min['ghi'].index <= dates[i+1])]
+                    .mean() for i in range(len(dates) - 1)
+                    ]
+                dni_clear = [
+                    cs_1min['dni'].loc[(cs_1min['dni'].index > dates[i]) & (cs_1min['dni'].index <= dates[i+1])]
+                    .mean() for i in range(len(dates) - 1)
+                    ]
 
-            # direct horiz clear to dni_clear
-            sp = pvlib.solarposition.ephemeris(
-                df.index,
-                loc.latitude,
-                loc.longitude
-            )
-            cos_zenith = np.maximum(np.cos(np.deg2rad(sp['apparent_zenith'])),
-                                    min_cos_zenith)
-            df['dni_clear'] = (df['direct_horiz_clear'] / cos_zenith)
-            df_n_min = df_n_min.join(df.drop(
-                ['temp_air', 'wind_speed', 'wind_direction',
-                 'lead_time'], axis=1))
+                # write to df
+                df['ghi_clear'] = [np.nan] + ghi_clear
+                df['dni_clear'] = [np.nan] + dni_clear
+                # calculate clear sky index of ghi, dni, ghi_clear_nwp
+                df['ghi_csi'] = df['ghi'] / df['ghi_clear']
+                df['dni_csi'] = df['dni'] / df['dni_clear']
+                df['ghi_clear_nwp_csi'] = df['ghi_clear_nwp'] / df['ghi_clear']
+                # avoid divide by zero issues
+                df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
+                df.loc[df['dni_clear'] == 0, 'dni_csi'] = 0
+                df.loc[df['ghi_clear_nwp'] == 0, 'ghi_clear_nwp_csi'] = 0
 
-            # calculate dhi from ghi, dni, solar position
-            df_n_min['dhi'] = (df_n_min['ghi'] -
-                               (df_n_min['dni'] * cos_zenith))
+                # 1min pvlib clear sky direct horizontal irradiance
+                cos_zenith_1min = np.maximum(
+                    np.cos(np.deg2rad(sp_1min['apparent_zenith'])),
+                    min_cos_zenith)
+                cs_1min['direct_horiz'] = (cs_1min['dni'] * cos_zenith_1min)
+                # 60min pvlib clear sky direct horizontal irradiance
+                # right-labeled to match df
+                direct_horiz_clear = cs_1min['direct_horiz'].resample(
+                    '60min', label='right').mean()
+                # 60min csi of forecasted clear sky direct horiz irrad
+                df['direct_horiz_clear_csi'] = (df['direct_horiz_clear'] /
+                                                direct_horiz_clear)
+                # avoid divide by zero issues
+                df.loc[df['direct_horiz_clear'] == 0, 'direct_horiz_clear_csi'] = 0
+
+                # "backfill" csi values
+                df_n_min = pd.merge_asof(
+                    left=df_n_min,
+                    right=df[['ghi_csi', 'dni_csi', 'ghi_clear_nwp_csi', 'direct_horiz_clear_csi']],
+                    direction='forward', right_index=True, left_index=True
+                )
+
+                df_n_min['ghi'] = df_n_min['ghi_csi'] * cs_n_min['ghi']
+                df_n_min['dni'] = df_n_min['dni_csi'] * cs_n_min['dni']
+                df_n_min['direct_horiz_clear'] = df_n_min['direct_horiz_clear_csi'] * cs_n_min['direct_horiz']
+                df_n_min['dni_clear'] = (df_n_min['direct_horiz_clear'] /
+                                         cos_zenith_n_min)
+                df_n_min['ghi_clear_nwp'] = df_n_min['ghi_clear_nwp_csi'] * cs_n_min['ghi']
+
+                # calculate dhi from ghi, dni, solar position
+                df_n_min['dhi'] = (df_n_min['ghi'] -
+                                   (df_n_min['dni'] * cos_zenith_n_min))
+            elif interval == 60:
+                # adjust timestamps to center of interval
+                df.index = df.index - pd.Timedelta('30min')
+
+                # direct horiz clear to dni_clear
+                sp = pvlib.solarposition.ephemeris(
+                    df.index,
+                    loc.latitude,
+                    loc.longitude
+                )
+                cos_zenith = np.maximum(
+                    np.cos(np.deg2rad(sp['apparent_zenith'])),
+                    min_cos_zenith)
+                df['dni_clear'] = (df['direct_horiz_clear'] / cos_zenith)
+
+                df_n_min = df_n_min.join(df.drop(
+                    ['temp_air', 'wind_speed', 'wind_direction', 'lead_time'],
+                    axis=1))
+
+                # calculate dhi from ghi, dni, solar position
+                df_n_min['dhi'] = (df_n_min['ghi'] -
+                                   (df_n_min['dni'] * cos_zenith))
 
             # clean up dataframe
             df_n_min['ghi_clear'] = df_n_min['ghi_clear_nwp']
