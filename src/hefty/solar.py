@@ -902,6 +902,24 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             tz=df.index.tz
             )
 
+        # make 1min interval clear sky data covering our time range
+        times_1min = pd.date_range(
+            start=df.index[0]+pd.Timedelta('30s'),
+            end=df.index[-1]-pd.Timedelta('30s'),
+            freq='1min',
+            tz='UTC')
+        # calculate clear sky ghi with pvlib
+        sp_1min = pvlib.solarposition.ephemeris(
+            times_1min,
+            loc.latitude,
+            loc.longitude
+        )
+        apparent_elevation_1min = sp_1min['apparent_elevation']
+        cs_1min = pvlib.clearsky.simplified_solis(
+            apparent_elevation_1min,
+            **model_cs_kwargs
+        )
+
         if model in {'gfs', 'gefs'}:
             # for gfs and gefs ghi: we have to "unmix" the rolling average
             # irradiance that resets every 6 hours
@@ -940,29 +958,10 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             df['dni'] = df['vbdsf']
 
         if model in {'gfs', 'gefs', 'ifs', 'ifs_ens', 'aifs', 'aifs_ens'}:
-            # make 1min interval clear sky data covering our time range
-            times = pd.date_range(
-                start=df.index[0]+pd.Timedelta('30s'),
-                end=df.index[-1]-pd.Timedelta('30s'),
-                freq='1min',
-                tz='UTC')
-
-            # calculate clear sky ghi with pvlib
-            sp = pvlib.solarposition.ephemeris(
-                times,
-                loc.latitude,
-                loc.longitude
-            )
-            apparent_elevation = sp['apparent_elevation']
-            cs = pvlib.clearsky.simplified_solis(
-                apparent_elevation,
-                **model_cs_kwargs
-            )
-
             # calculate average CS ghi over the intervals from the forecast
             # based on list comprehension example in
             # https://stackoverflow.com/a/55724134/27574852
-            ghi = cs['ghi']
+            ghi = cs_1min['ghi']
             dates = df.index
             ghi_clear = [
                 ghi.loc[(ghi.index > dates[i]) & (ghi.index <= dates[i+1])]
@@ -999,28 +998,33 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                 direction='forward'
             ).set_index('valid_time')
 
-            # make n-min interval clear sky, centered at bottom of the hour
-            times = pd.date_range(
-                start=df.index[0]+pd.Timedelta(interval/2, 'min'),
-                end=df.index[-1]-pd.Timedelta(interval/2, 'min'),
-                freq=f'{interval}min',
-                tz='UTC')
+            # make n-min interval clear sky centered at bottom of the interval
+            if interval == 1:
+                times_n_min = times_1min
+                sp_n_min = sp_1min
+                cs_n_min = cs_1min
+            else:
+                times_n_min = pd.date_range(
+                    start=df.index[0]+pd.Timedelta(interval/2, 'min'),
+                    end=df.index[-1]-pd.Timedelta(interval/2, 'min'),
+                    freq=f'{interval}min',
+                    tz='UTC')
 
-            # calculate clear sky ghi with pvlib
-            sp = pvlib.solarposition.ephemeris(
-                times,
-                loc.latitude,
-                loc.longitude
-            )
-            apparent_elevation = sp['apparent_elevation']
-            cs = pvlib.clearsky.simplified_solis(
-                apparent_elevation,
-                **model_cs_kwargs
-            )
+                # calculate clear sky ghi with pvlib
+                sp_n_min = pvlib.solarposition.ephemeris(
+                    times_n_min,
+                    loc.latitude,
+                    loc.longitude
+                )
+                apparent_elevation_n_min = sp_n_min['apparent_elevation']
+                cs_n_min = pvlib.clearsky.simplified_solis(
+                    apparent_elevation_n_min,
+                    **model_cs_kwargs
+                )
 
             # calculate ghi from clear sky and backfilled forecasted clear sky
             # index
-            df_n_min['ghi'] = cs['ghi'] * df_n_min['ghi_csi']
+            df_n_min['ghi'] = cs_n_min['ghi'] * df_n_min['ghi_csi']
 
             # clip to avoid occasional small negative ghi in GEFS, see GH #35
             df_n_min['ghi'] = df_n_min['ghi'].clip(lower=0)
@@ -1029,23 +1033,23 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             if decomp_model == 'erbs':
                 out_erbs = pvlib.irradiance.erbs(
                     df_n_min['ghi'],
-                    sp['zenith'],
+                    sp_n_min['zenith'],
                     df_n_min.index,
                 )
                 df_n_min['dni'] = out_erbs['dni']
                 df_n_min['dhi'] = out_erbs['dhi']
             elif decomp_model == 'dirindex':
-                cs_decomp = cs  # could later use a different cs model...
+                cs_decomp = cs_n_min  # could later use a different cs model...
                 decomp = pvlib.irradiance.dirindex(
                     ghi=df_n_min['ghi'],
                     ghi_clear=cs_decomp['ghi'],
                     dni_clear=cs_decomp['dni'],
-                    zenith=sp['zenith'],
-                    times=times,
+                    zenith=sp_n_min['zenith'],
+                    times=times_n_min,
                 )
                 df_n_min['dni'] = decomp.fillna(0)
                 cos_zenith = np.maximum(
-                    np.cos(np.deg2rad(sp['apparent_zenith'])),
+                    np.cos(np.deg2rad(sp_n_min['apparent_zenith'])),
                     min_cos_zenith
                 )
                 df_n_min['dhi'] = (df_n_min['ghi'] -
@@ -1058,7 +1062,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
 
         elif model == 'hrrr':
             if hrrr_hour_middle is True:
-                # clear sky index
+                # clear sky index at top of the hour, hrrr is instantaneous
                 times = df.index
                 sp = pvlib.solarposition.ephemeris(
                     times,
@@ -1070,63 +1074,44 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                     apparent_elevation,
                     **model_cs_kwargs
                 )
-                df['csi_ghi'] = df['ghi'] / cs['ghi']
-                df['csi_dni'] = df['dni'] / cs['dni']
+                df['ghi_csi'] = df['ghi'] / cs['ghi']
+                df['dni_csi'] = df['dni'] / cs['dni']
                 # avoid divide by zero issues
-                df.loc[df['ghi'] == 0, 'csi_ghi'] = 0
-                df.loc[df['dni'] == 0, 'csi_dni'] = 0
-
-                # make 1min interval clear sky data covering our time range
-                times = pd.date_range(
-                    start=df.index[0]+pd.Timedelta('30s'),
-                    end=df.index[-1]-pd.Timedelta('30s'),
-                    freq='1min',
-                    tz='UTC')
-
-                # calculate clear sky ghi with pvlib
-                sp = pvlib.solarposition.ephemeris(
-                    times,
-                    loc.latitude,
-                    loc.longitude
-                )
-                apparent_elevation = sp['apparent_elevation']
-                cs = pvlib.clearsky.simplified_solis(
-                    apparent_elevation,
-                    **model_cs_kwargs
-                )
+                df.loc[df['ghi'] == 0, 'ghi_csi'] = 0
+                df.loc[df['dni'] == 0, 'dni_csi'] = 0
 
                 # calculate 1min interpolated temp_air, wind_speed, csi
                 df_01min = (
-                    df[['temp_air', 'wind_speed', 'wind_direction', 'csi_ghi',
-                        'csi_dni', 'lead_time']]
+                    df[['temp_air', 'wind_speed', 'wind_direction', 'ghi_csi',
+                        'dni_csi', 'lead_time']]
                     .resample('1min', offset='30s', closed='left')
                     .interpolate(method='time')
                 )[1:]  # drop first row, which is NaNs
                 # add ghi_clear
-                df_01min['ghi_clear'] = cs['ghi']
-                df_01min['dni_clear'] = cs['dni']
-                # calculate hour averages centered labelled at bottom of the
-                # hour
-                df_60min = df_01min.resample('1h').mean()
-                df_60min.index = df_60min.index + pd.Timedelta('30min')
+                df_01min['ghi_clear'] = cs_1min['ghi']
+                df_01min['dni_clear'] = cs_1min['dni']
+                # calculate n-min averages centered labeled at bottom of the
+                # interval
+                df_n_min = df_01min.resample(f'{interval}min').mean()
+                df_n_min.index = (df_n_min.index +
+                                  pd.Timedelta(f'{interval/2}min'))
                 # calculate new ghi
-                df_60min['ghi'] = df_60min['csi_ghi'] * df_60min['ghi_clear']
-                df_60min['dni'] = df_60min['csi_dni'] * df_60min['dni_clear']
-
+                df_n_min['ghi'] = df_n_min['ghi_csi'] * df_n_min['ghi_clear']
+                df_n_min['dni'] = df_n_min['dni_csi'] * df_n_min['dni_clear']
             else:
-                df_60min = df[['ghi', 'dni', 'temp_air', 'wind_speed',
+                df_n_min = df[['ghi', 'dni', 'temp_air', 'wind_speed',
                                'wind_direction', 'lead_time']]
 
             # calculate dhi from ghi, dni, solar position
             sp = pvlib.solarposition.ephemeris(
-                    df_60min.index,
+                    df_n_min.index,
                     loc.latitude,
                     loc.longitude
                 )
             cos_zenith = np.maximum(np.cos(np.deg2rad(sp['apparent_zenith'])),
                                     min_cos_zenith)
-            df_60min['dhi'] = (df_60min['ghi'] -
-                               (df_60min['dni'] * cos_zenith))
+            df_n_min['dhi'] = (df_n_min['ghi'] -
+                               (df_n_min['dni'] * cos_zenith))
 
             # add clearsky ghi
             apparent_elevation = sp['apparent_elevation']
@@ -1134,26 +1119,26 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                 apparent_elevation,
                 **model_cs_kwargs
             )
-            df_60min['ghi_clear'] = cs['ghi']
-            df_60min['dni_clear'] = cs['dni']
+            df_n_min['ghi_clear'] = cs['ghi']
+            df_n_min['dni_clear'] = cs['dni']
 
-            dfs[j] = df_60min
+            dfs[j] = df_n_min
 
     # concatenate creating multiindex with keys of the list of point numbers
     # assigned to 'point', reorder indices, and sort by valid_time
-    df_60min = (
+    df_n_min = (
         pd.concat(dfs, keys=list(range(num_sites)), names=['point'])
         .reorder_levels(["valid_time", "point"])
         .sort_index(level='valid_time')
     )
 
     # set "point" index as a column
-    df_60min = df_60min.reset_index().set_index('valid_time')
+    df_n_min = df_n_min.reset_index().set_index('valid_time')
 
     # drop unneeded columns if they exist
-    df_60min = df_60min.drop(['t2m', 'sdswrf'], axis=1, errors='ignore')
+    df_n_min = df_n_min.drop(['t2m', 'sdswrf'], axis=1, errors='ignore')
 
-    return df_60min
+    return df_n_min
 
 
 def get_solar_forecast_ensemble_subset(
