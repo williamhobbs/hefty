@@ -102,6 +102,12 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         Options include 'dirindex' and 'erbs'. Note that HRRR and CAMS include
         DNI, so this parameter does not apply to those models.
 
+    interval : numeric, default 60
+        Interval length, in minutes, of intermediate solar calculations and
+        the output interval. Default is 60, but shorter intervals (e.g., 5)
+        could provide benefit due to improved accuracy in decomposition, at
+        the expense of longer computation times. Must be a factor of 60.
+
     Returns
     -------
     data : pandas.DataFrane
@@ -796,7 +802,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         Interval length, in minutes, of intermediate solar calculations and
         the output interval. Default is 60, but shorter intervals (e.g., 5)
         could provide benefit due to improved accuracy in decomposition, at
-        the expense of longer computation times.
+        the expense of longer computation times. Must be a factor of 60.
 
     Returns
     -------
@@ -1634,7 +1640,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
         Interval length, in minutes, of intermediate solar calculations and
         the output interval. Default is 60, but shorter intervals (e.g., 5)
         could provide benefit due to improved accuracy in decomposition, at
-        the expense of longer computation times.
+        the expense of longer computation times. Must be a factor of 60.
 
     Returns
     -------
