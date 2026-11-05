@@ -1143,6 +1143,7 @@ def get_fcast_dataframe(
     use_fastherbie = False
     use_herbie = False
     get_control = None
+    resolution = None
     if priority is None or priority.lower() in [x.lower() for x in [
             'aws', 'google', 'azure', 'nomads', 'ecmwf']]:
         if fast:
@@ -1161,6 +1162,7 @@ def get_fcast_dataframe(
         # set model_herbie variable
         if model == 'ifs_ens':
             model_herbie = 'ifs'
+            resolution = '0p25'  # see GH #129 
         elif model == 'aifs_ens':
             # for herbie "get_control" option with aifs ensemble
             if member == 0 or member == '0':
@@ -1193,7 +1195,8 @@ def get_fcast_dataframe(
                 FH = FastHerbie([init_date], model=model_herbie,
                                 product=product, fxx=fxx_range,
                                 member=member, priority=priority,
-                                get_control=get_control)
+                                get_control=get_control,
+                                resolution=resolution)
             except Exception as e:
                 print(e)
                 if attempts_remaining:
