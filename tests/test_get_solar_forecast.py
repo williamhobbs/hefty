@@ -188,12 +188,12 @@ def test_cams_subhourly_interval():
     lead_time_to_start = 3
     model = 'cams'
     cams_area = [50, -125, 20, -65]  # approx. CONUS
-    interval = 15
+    output_interval = 15
     rd = get_solar_forecast(
         latitude, longitude, init_date, run_length,
         lead_time_to_start, model, member=None,
         attempts=2, cams_api_key=cams_api_key,
-        cams_area=cams_area, interval=interval)
+        cams_area=cams_area, output_interval=output_interval)
     # only use first 3 rows
     rd = rd.iloc[:3]
     # hard-coded reference
