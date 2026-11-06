@@ -22,7 +22,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                        attempts=2, hrrr_hour_middle=None,
                        hrrr_coarsen_window=None, priority=None,
                        cams_api_key=None, cams_area=None,
-                       decomp_model=None, interval=60):
+                       decomp_model=None, output_interval=60):
     """
     Get a solar resource forecast for one or several sites from one of several
     NWPs. This function uses Herbie [1]_ and pvlib [2]_.
@@ -102,7 +102,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         Options include 'dirindex' and 'erbs'. Note that HRRR and CAMS include
         DNI, so this parameter does not apply to those models.
 
-    interval : numeric, default 60
+    output_interval : numeric, default 60
         Interval length, in minutes, of intermediate solar calculations and
         the output interval. Default is 60, but shorter intervals (e.g., 5)
         could provide benefit due to improved accuracy in decomposition, at
@@ -418,7 +418,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # n-min version of data, centered at bottom of the interval
             new_index = pd.date_range(df.index.min(),
                                       df.index.max(),
-                                      freq=f'{interval/2}min',
+                                      freq=f'{output_interval/2}min',
                                       name='valid_time')
             cols = ['temp_air', 'wind_speed', 'wind_direction',
                     'lead_time']
@@ -437,15 +437,15 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             ).set_index('valid_time')
 
             # make n-min interval clear sky centered at bottom of the interval
-            if interval == 1:
+            if output_interval == 1:
                 times_n_min = times_1min
                 sp_n_min = sp_1min
                 cs_n_min = cs_1min
             else:
                 times_n_min = pd.date_range(
-                    start=df.index[0]+pd.Timedelta(interval/2, 'min'),
-                    end=df.index[-1]-pd.Timedelta(interval/2, 'min'),
-                    freq=f'{interval}min',
+                    start=df.index[0]+pd.Timedelta(output_interval/2, 'min'),
+                    end=df.index[-1]-pd.Timedelta(output_interval/2, 'min'),
+                    freq=f'{output_interval}min',
                     tz='UTC')
 
                 # calculate clear sky ghi with pvlib
@@ -500,15 +500,15 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
 
         elif model == 'cams':
             # make n-min interval clear sky centered at bottom of the interval
-            if interval == 1:
+            if output_interval == 1:
                 times_n_min = times_1min
                 sp_n_min = sp_1min
                 cs_n_min = cs_1min
             else:
                 times_n_min = pd.date_range(
-                    start=df.index[0]+pd.Timedelta(interval/2, 'min'),
-                    end=df.index[-1]-pd.Timedelta(interval/2, 'min'),
-                    freq=f'{interval}min',
+                    start=df.index[0]+pd.Timedelta(output_interval/2, 'min'),
+                    end=df.index[-1]-pd.Timedelta(output_interval/2, 'min'),
+                    freq=f'{output_interval}min',
                     tz='UTC')
 
                 # calculate clear sky ghi with pvlib
@@ -530,7 +530,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # n-min version of data, centered at bottom of the interval
             new_index = pd.date_range(df.index.min(),
                                       df.index.max(),
-                                      freq=f'{interval/2}min',
+                                      freq=f'{output_interval/2}min',
                                       name='valid_time')
             cols = ['temp_air', 'wind_speed', 'wind_direction',
                     'lead_time']
@@ -538,7 +538,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 new_index).interpolate(method='time')
             df_n_min = df_interp.iloc[1::2]
 
-            if interval < 60:
+            if output_interval < 60:
                 # calculate average CS ghi/dni over the intervals from the
                 # forecast based on list comprehension example in
                 # https://stackoverflow.com/a/55724134/27574852
@@ -607,7 +607,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 # calculate dhi from ghi, dni, solar position
                 df_n_min['dhi'] = (df_n_min['ghi'] -
                                    (df_n_min['dni'] * cos_zenith_n_min))
-            elif interval == 60:
+            elif output_interval == 60:
                 # adjust timestamps to center of interval
                 df.index = df.index - pd.Timedelta('30min')
 
@@ -671,9 +671,9 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 df_01min['dni_clear'] = cs_1min['dni']
                 # calculate n-min averages centered labeled at bottom of the
                 # interval
-                df_n_min = df_01min.resample(f'{interval}min').mean()
+                df_n_min = df_01min.resample(f'{output_interval}min').mean()
                 df_n_min.index = (df_n_min.index +
-                                  pd.Timedelta(f'{interval/2}min'))
+                                  pd.Timedelta(f'{output_interval/2}min'))
                 # calculate new ghi
                 df_n_min['ghi'] = df_n_min['ghi_csi'] * df_n_min['ghi_clear']
                 df_n_min['dni'] = df_n_min['dni_csi'] * df_n_min['dni_clear']
@@ -724,7 +724,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                             lead_time_to_start=0, model='gfs', member=None,
                             attempts=2, hrrr_hour_middle=None,
                             hrrr_coarsen_window=None, priority=None,
-                            decomp_model=None, interval=60):
+                            decomp_model=None, output_interval=60):
     """
     Get a solar resource forecast for one or several sites from one of several
     NWPs. This function uses Herbie [1]_ and pvlib [2]_. This version
@@ -798,7 +798,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         Options include 'dirindex' and 'erbs'. Note that HRRR and CAMS include
         DNI, so this parameter does not apply to those models.
 
-    interval : numeric, default 60
+    output_interval : numeric, default 60
         Interval length, in minutes, of intermediate solar calculations and
         the output interval. Default is 60, but shorter intervals (e.g., 5)
         could provide benefit due to improved accuracy in decomposition, at
@@ -986,7 +986,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             # n-min version of data, centered at bottom of the interval
             new_index = pd.date_range(df.index.min(),
                                       df.index.max(),
-                                      freq=f'{interval/2}min',
+                                      freq=f'{output_interval/2}min',
                                       name='valid_time')
             cols = ['temp_air', 'wind_speed', 'wind_direction',
                     'lead_time']
@@ -1005,15 +1005,15 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
             ).set_index('valid_time')
 
             # make n-min interval clear sky centered at bottom of the interval
-            if interval == 1:
+            if output_interval == 1:
                 times_n_min = times_1min
                 sp_n_min = sp_1min
                 cs_n_min = cs_1min
             else:
                 times_n_min = pd.date_range(
-                    start=df.index[0]+pd.Timedelta(interval/2, 'min'),
-                    end=df.index[-1]-pd.Timedelta(interval/2, 'min'),
-                    freq=f'{interval}min',
+                    start=df.index[0]+pd.Timedelta(output_interval/2, 'min'),
+                    end=df.index[-1]-pd.Timedelta(output_interval/2, 'min'),
+                    freq=f'{output_interval}min',
                     tz='UTC')
 
                 # calculate clear sky ghi with pvlib
@@ -1098,9 +1098,9 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                 df_01min['dni_clear'] = cs_1min['dni']
                 # calculate n-min averages centered labeled at bottom of the
                 # interval
-                df_n_min = df_01min.resample(f'{interval}min').mean()
+                df_n_min = df_01min.resample(f'{output_interval}min').mean()
                 df_n_min.index = (df_n_min.index +
-                                  pd.Timedelta(f'{interval/2}min'))
+                                  pd.Timedelta(f'{output_interval/2}min'))
                 # calculate new ghi
                 df_n_min['ghi'] = df_n_min['ghi_csi'] * df_n_min['ghi_clear']
                 df_n_min['dni'] = df_n_min['dni_csi'] * df_n_min['dni_clear']
@@ -1567,7 +1567,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                 lead_time_to_start=0, model='ifs_ens',
                                 attempts=2, priority=None,
                                 get_ens_temp=False, get_ens_wind=False,
-                                decomp_model='dirindex', interval=60):
+                                decomp_model='dirindex', output_interval=60):
     """
     Get solar resource forecasts for one or several sites using all ensemble
     members. Using `get_solar_forecast_ensemble_subset` may be fast for a
@@ -1636,7 +1636,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
     decomp_model : string, default 'dirindex'
         Decomposition model to use. Options include 'dirindex' and 'erbs'.
 
-    interval : numeric, default 60
+    output_interval : numeric, default 60
         Interval length, in minutes, of intermediate solar calculations and
         the output interval. Default is 60, but shorter intervals (e.g., 5)
         could provide benefit due to improved accuracy in decomposition, at
@@ -1781,9 +1781,9 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
 
             # longer interval clear sky, centered at bottom of the interval
             times_n_min = pd.date_range(
-                start=df.index[0]+pd.Timedelta(interval/2, 'min'),
-                end=df.index[-1]-pd.Timedelta(interval/2, 'min'),
-                freq=f'{interval}min',
+                start=df.index[0]+pd.Timedelta(output_interval/2, 'min'),
+                end=df.index[-1]-pd.Timedelta(output_interval/2, 'min'),
+                freq=f'{output_interval}min',
                 tz='UTC')
 
             # calculate clear sky ghi with pvlib
@@ -1829,7 +1829,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # n-min version of data, centered at bottom of the interval
                 new_index = pd.date_range(df.index.min(),
                                           df.index.max(),
-                                          freq=f'{interval/2}min',
+                                          freq=f'{output_interval/2}min',
                                           name='valid_time')
                 cols = ['temp_air', 'wind_speed', 'wind_direction',
                         'lead_time']
@@ -2006,7 +2006,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # n_min version of data, centered at bottom of the interval
                 new_index = pd.date_range(df.index.min(),
                                           df.index.max(),
-                                          freq=f'{interval/2}min',
+                                          freq=f'{output_interval/2}min',
                                           name='valid_time')
                 cols = ['temp_air', 'wind_speed', 'wind_direction',
                         'lead_time']
@@ -2026,9 +2026,9 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
 
                 # n_min interval clear sky, centered at bottom of the interval
                 times = pd.date_range(
-                    start=df.index[0]+pd.Timedelta(interval/2, 'min'),
-                    end=df.index[-1]-pd.Timedelta(interval/2, 'min'),
-                    freq=f'{interval}min',
+                    start=df.index[0]+pd.Timedelta(output_interval/2, 'min'),
+                    end=df.index[-1]-pd.Timedelta(output_interval/2, 'min'),
+                    freq=f'{output_interval}min',
                     tz='UTC')
 
                 # calculate clear sky ghi with pvlib
