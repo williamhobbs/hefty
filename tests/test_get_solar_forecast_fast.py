@@ -40,8 +40,8 @@ def test_hrrr():
         'temp_air': [24.256072998046875],
         'wind_speed': [2.9900758266448975],
         'wind_direction': [104.61888885498047],
-        'csi_ghi': [0.6292502775807292],
-        'csi_dni': [0.47865940464350987],
+        'ghi_csi': [0.6292502775807292],
+        'dni_csi': [0.47865940464350987],
         'lead_time': [3.5],
         'ghi_clear': [753.1687745026209],
         'dni_clear': [959.9273121182977],
@@ -179,8 +179,8 @@ def test_ifs():
     data = {
         'valid_time': pd.DatetimeIndex(
             ['2026-09-24 15:30:00+00:00',
-            '2026-09-24 16:30:00+00:00',
-            '2026-09-24 17:30:00+00:00']),
+             '2026-09-24 16:30:00+00:00',
+             '2026-09-24 17:30:00+00:00']),
         'point': [0, 0, 0],
         'temp_air': [20.94012451171875, 21.971435546875, 23.00274658203125],
         'wind_speed': [2.938384532928467, 2.871222972869873,
@@ -218,7 +218,7 @@ def test_ifs_ens():
             ['2026-09-24 18:30:00+00:00',
              '2026-09-24 19:30:00+00:00',
              '2026-09-24 20:30:00+00:00'],
-             dtype='datetime64[ns, UTC]'),
+            dtype='datetime64[ns, UTC]'),
         'point': [0, 0, 0],
         'temp_air': [24.22916603088379, 24.9375, 25.64583396911621],
         'wind_speed': [2.751185894012451, 2.7751731872558594,
@@ -234,4 +234,89 @@ def test_ifs_ens():
         'ghi_clear': [886.8829006521986, 793.3282145157566, 639.3680196043877]
     }
     rd_test = pd.DataFrame(data).set_index('valid_time')
+    assert_frame_equal(rd, rd_test, check_dtype=False, rtol=1e-4)
+
+
+def test_hrrr_subhourly_interval():
+    latitude = 33.5
+    longitude = -86.8
+    init_date = pd.Timestamp('2026-09-24 12:00:00+0000')
+    run_length = 3
+    lead_time_to_start = 3
+    model = 'hrrr'
+    output_interval = 15
+    rd = get_solar_forecast_fast(
+        latitude, longitude, init_date, run_length,
+        lead_time_to_start, model, member=None,
+        attempts=2, output_interval=output_interval)
+    # only use first 3 rows
+    rd = rd.iloc[:3]
+    # hard-coded reference
+    data = {
+        'valid_time': pd.DatetimeIndex(
+            ['2026-09-24 15:07:30+00:00', '2026-09-24 15:22:30+00:00',
+             '2026-09-24 15:37:30+00:00']),
+        'point': [0, 0, 0],
+        'temp_air': [23.631500244140625, 24.047882080078125,
+                     24.464263916015625],
+        'wind_speed': [3.0211355686187744, 3.000429391860962,
+                       2.979722499847412],
+        'wind_direction': [109.44141387939453, 106.22640228271484,
+                           103.0113754272461],
+        'ghi_csi': [0.5356024424978777, 0.598034332553112,
+                    0.6604662226083463],
+        'dni_csi': [0.3410329784870825, 0.43278392925803405,
+                    0.5245348800289856],
+        'lead_time': [3.125, 3.375, 3.625],
+        'ghi_clear': [695.5476023007343, 734.820059983353, 770.6235422942924],
+        'dni_clear': [944.4596247775394, 955.1578743641159,
+                      964.3383583094261],
+        'ghi': [372.46496310295225, 439.36152608733687, 508.8701249176209],
+        'dni': [322.06768727098057, 413.34978211133097, 505.7994999586545],
+        'dhi': [162.48049641531028, 156.61716625749398, 148.17278498652348]
+    }
+    rd_test = pd.DataFrame(data).set_index('valid_time')
+    rd_test.index = rd_test.index.astype("datetime64[ns, UTC]")
+
+    assert_frame_equal(rd, rd_test, check_dtype=False, rtol=1e-4)
+
+
+def test_gfs_dynamical_subhourly_interval():
+    latitude = 33.5
+    longitude = -86.8
+    init_date = pd.Timestamp('2026-09-24 12:00:00+0000')
+    run_length = 3
+    lead_time_to_start = 3
+    model = 'gfs'
+    priority = 'dynamical'
+    output_interval = 15
+    rd = get_solar_forecast_fast(
+        latitude, longitude, init_date, run_length,
+        lead_time_to_start, model, member=None,
+        attempts=2, priority=priority,
+        output_interval=output_interval)
+    # only use first 3 rows
+    rd = rd.iloc[:3]
+    # hard-coded reference
+    data = {
+        'valid_time': pd.DatetimeIndex(
+            ['2026-09-24 15:07:30+00:00', '2026-09-24 15:22:30+00:00',
+             '2026-09-24 15:37:30+00:00']),
+        'point': [0, 0, 0],
+        'temp_air': [22.890625, 23.171875, 23.453125],
+        'wind_speed': [2.9044125080108643, 2.781244993209839,
+                       2.6580777168273926],
+        'wind_direction': [97.39085388183594, 96.27518463134766,
+                           95.1595230102539],
+        'lead_time': [3.125, 3.375, 3.625],
+        'ghi_csi': [0.5980380050167194, 0.5980380050167194,
+                    0.5980380050167194],
+        'ghi': [415.9639004740937, 439.45032271871054, 460.86216585259615],
+        'dni': [138.04931763670572, 137.2237903769144, 136.45542410425466],
+        'dhi': [325.95731649739537, 345.5848982218976, 363.5526420242853],
+        'ghi_clear': [695.5476023007343, 734.820059983353, 770.6235422942924]
+    }
+    rd_test = pd.DataFrame(data).set_index('valid_time')
+    rd_test.index = rd_test.index.astype("datetime64[ns, UTC]")
+
     assert_frame_equal(rd, rd_test, check_dtype=False, rtol=1e-4)

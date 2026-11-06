@@ -40,8 +40,8 @@ def test_hrrr():
         'temp_air': [24.256072998046875],
         'wind_speed': [2.9900758266448975],
         'wind_direction': [104.61888885498047],
-        'csi_ghi': [0.6292502775807292],
-        'csi_dni': [0.47865940464350987],
+        'ghi_csi': [0.6292502775807292],
+        'dni_csi': [0.47865940464350987],
         'lead_time': [3.5],
         'ghi_clear': [753.1687745026209],
         'dni_clear': [959.9273121182977],
@@ -147,7 +147,6 @@ def test_cams():
         lead_time_to_start, model, member=None,
         attempts=2, cams_api_key=cams_api_key,
         cams_area=cams_area)
-    rd.to_dict(orient='list')
     # hard-coded reference
     data = {
         'valid_time': pd.DatetimeIndex(
@@ -169,6 +168,53 @@ def test_cams():
         'direct_horiz_clear': [587.5676504564902,
                                691.3537814881844,
                                735.0662477084148]
+    }
+    rd_test = pd.DataFrame(data).set_index('valid_time')
+    rd_test.index = rd_test.index.astype("datetime64[ns, UTC]")
+
+    assert_frame_equal(rd, rd_test, check_dtype=False, rtol=1e-4)
+
+
+def test_cams_subhourly_interval():
+    # get cams api key
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()  # Load variables from .env locally
+    cams_api_key = os.getenv("CAMS_API_KEY")
+    latitude = 33.5
+    longitude = -86.8
+    init_date = pd.Timestamp('2026-09-24 12:00:00+0000')
+    run_length = 3
+    lead_time_to_start = 3
+    model = 'cams'
+    cams_area = [50, -125, 20, -65]  # approx. CONUS
+    output_interval = 15
+    rd = get_solar_forecast(
+        latitude, longitude, init_date, run_length,
+        lead_time_to_start, model, member=None,
+        attempts=2, cams_api_key=cams_api_key,
+        cams_area=cams_area, output_interval=output_interval)
+    # only use first 3 rows
+    rd = rd.iloc[:3]
+    # hard-coded reference
+    data = {
+        'valid_time': pd.DatetimeIndex(
+            ['2026-09-24 15:07:30+00:00', '2026-09-24 15:22:30+00:00',
+             '2026-09-24 15:37:30+00:00']),
+        'point': [0, 0, 0],
+        'temp_air': [22.299680808370233, 22.3278090864625, 22.35593736455477],
+        'wind_speed': [2.9122819746391104, 2.8705017339893515,
+                       2.828721493339592],
+        'wind_direction': [106.95174491421153, 104.91056782521633,
+                           102.8693907362211],
+        'ghi': [281.6198566975308, 297.52085882614847, 312.0173095713266],
+        'dni': [103.67892839183806, 104.85333862993154, 105.86113474169485],
+        'dhi': [214.0223753432814, 225.79784991221916, 236.52528218391706],
+        'ghi_clear': [628.9500476439719, 664.4622312082237, 696.837588165531],
+        'dni_clear': [829.8608079532829, 839.2609536161464, 847.327496244744],
+        'lead_time': [3.125, 3.375, 3.625],
+        'direct_horiz_clear': [541.0598022409777, 574.0811083734109,
+                               604.2488653526527]
     }
     rd_test = pd.DataFrame(data).set_index('valid_time')
     rd_test.index = rd_test.index.astype("datetime64[ns, UTC]")
