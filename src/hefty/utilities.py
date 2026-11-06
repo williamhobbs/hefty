@@ -1162,7 +1162,6 @@ def get_fcast_dataframe(
         # set model_herbie variable
         if model == 'ifs_ens':
             model_herbie = 'ifs'
-            resolution = '0p25'  # see GH #129 
         elif model == 'aifs_ens':
             # for herbie "get_control" option with aifs ensemble
             if member == 0 or member == '0':
@@ -1172,6 +1171,9 @@ def get_fcast_dataframe(
             model_herbie = 'aifs'
         else:
             model_herbie = model
+        # set resolution, if needed, see GH #129 and #130
+        if model_herbie == 'ifs':
+            resolution = '0p25'
     elif priority == 'dynamical':
         if member is not None:
             if isinstance(member, str) and (member.lower() in
