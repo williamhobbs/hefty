@@ -134,12 +134,13 @@ def test_gfs_more():
     run_length = 1
     lead_time_to_start = 121
     model = 'gfs'
+    remove_gribs = True
     rd = get_solar_forecast_fast(
         latitude, longitude, init_date, run_length,
         lead_time_to_start, model, member=None,
         attempts=2, hrrr_hour_middle=None,
         hrrr_coarsen_window=None, priority='dynamical',
-        decomp_model='erbs')
+        decomp_model='erbs', remove_gribs=remove_gribs)
     data = {
         'valid_time': pd.DatetimeIndex(
             ['2026-09-29 12:30:00+00:00', '2026-09-29 13:30:00+00:00',
