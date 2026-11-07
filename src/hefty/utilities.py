@@ -1398,28 +1398,18 @@ def get_fcast_dataframe(
         mapping_in = {
             'DSWRF': ['downward_short_wave_radiation_flux_surface'],  # NOAA GHI
             'VBDSF': ['visible_beam_downward_solar_flux_surface'],  # NOAA HRRR DNI
-            ':TMP:2 m above': ['temperature_2m'],  # NOAA 2m temp
-            '[UV]GRD:10 m above': ['wind_u_10m', 'wind_v_10m'],  # NOAA 10m wind
-            'ssrd': ['downward_short_wave_radiation_flux_surface'],  # IFS/AIFS GHI
-            ':ssrd': ['downward_short_wave_radiation_flux_surface'],  # IFS/AIFS GHI, with the leading ":"
-            '2t': ['temperature_2m'],  # IFS/AIFS 2m temp
-            ':2t': ['temperature_2m'],  # IFS/AIFS 2m temp, with the leading ":"
-            '10[uv]': ['wind_u_10m', 'wind_v_10m'],  # IFS/AIFS 10m wind
-            ':10[uv]': ['wind_u_10m', 'wind_v_10m'],  # IFS/AIFS 10m wind, with the leading ":"
-            '[UV]GRD:80 m above': ['wind_u_80m', 'wind_v_80m'],  # GFS/GEFS
-            '[UV]GRD:100 m above': ['wind_u_100m', 'wind_v_100m'],  # GFS/GEFS
-            'PRES:surface': ['pressure_surface'],  # GFS
-            ':TMP:80 m above': ['temperature_80m'],  # GFS/GEFS
-            'PRES:80 m above': ['pressure_80m'],  # GFS/GEFS
-            ':100[uv]': ['wind_u_100m', 'wind_v_100m'],  # IFS/AIFS
-            ':sp': ['pressure_surface'],  # IFS/AIFS
-            '^(?=.*:ssrd:sfc:)(?:(?!:ssrd:sfc:g).)*$': [
-                'downward_short_wave_radiation_flux_surface'],  # IFS/AIFS ensemble
-            '^(?=.*:2t:sfc:)(?:(?!:2t:sfc:g).)*$': ['temperature_2m'],  # IFS/AIFS ensemble
-            '^(?=.*:10[uv]:)(?:(?!:10[uv]:sfc:g).)*$': [
-                'wind_u_10m', 'wind_v_10m'],  # IFS/AIFS ensemble
-            ':2t:sfc:g': ['temperature_2m'],  # IFS/AIFS 2m temp, filtered from get_ens_temp=False
-            ':10[uv]:sfc:g': ['wind_u_10m', 'wind_v_10m'],  # IFS/AIFS wind, filtered from get_ens_wind=False
+            'TMP:2 m': ['temperature_2m'],  # NOAA 2m temperature
+            '[UV]GRD:10 m': ['wind_u_10m', 'wind_v_10m'],  # NOAA 10m wind
+            '[UV]GRD:80 m': ['wind_u_80m', 'wind_v_80m'],  # NOAA 80m wind
+            '[UV]GRD:100 m': ['wind_u_100m', 'wind_v_100m'],  # NOAA 100m wind
+            'PRES:surface': ['pressure_surface'],  # NOAA surface pressure
+            'TMP:80 m': ['temperature_80m'],  # NOAA 80m temperature
+            'PRES:80 m': ['pressure_80m'],  # NOAA 80m pressure
+            'ssrd': ['downward_short_wave_radiation_flux_surface'],  # ECMWF GHI
+            '2t': ['temperature_2m'],  # ECMWF 2m temperature
+            '10[uv]': ['wind_u_10m', 'wind_v_10m'],  # ECMWF 10m wind
+            '100[uv]': ['wind_u_100m', 'wind_v_100m'],  # ECMWF 100m wind
+            'sp': ['pressure_surface'],  # ECMWF surface pressure
         }
 
         if resource_type == 'solar':
@@ -1450,7 +1440,10 @@ def get_fcast_dataframe(
 
         # dynamical variables list
         # replace each search string value with a list of dynamical variables
-        list1 = [mapping_in.get(a, a) for a in search_string_list]
+        list1 = [
+            [val for key, val in mapping_in.items() if key in s][0]
+            for s in search_string_list
+        ]
         # flatten list of lists
         dynamical_var_list = [s for list1 in list1 for s in list1]
 

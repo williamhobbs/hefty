@@ -237,6 +237,43 @@ def test_ifs_ens():
     assert_frame_equal(rd, rd_test, check_dtype=False, rtol=1e-4)
 
 
+def test_ifs_ens_set_member_dynamical():
+    latitude = 33.5
+    longitude = -86.8
+    init_date = pd.Timestamp('2026-09-24 00:00:00+0000')
+    run_length = 3
+    lead_time_to_start = 18
+    model = 'ifs_ens'
+    rd = get_solar_forecast_fast(
+        latitude, longitude, init_date, run_length,
+        lead_time_to_start, model, member=2,
+        attempts=2, hrrr_hour_middle=None,
+        hrrr_coarsen_window=None, priority='dynamical',
+        decomp_model=None)
+    # hard-coded reference
+    data = {
+        'valid_time': pd.DatetimeIndex(
+            ['2026-09-24 18:30:00+00:00', '2026-09-24 19:30:00+00:00',
+             '2026-09-24 20:30:00+00:00']),
+        'point': [0, 0, 0],
+        'temp_air': [24.6875, 25.0625, 25.4375],
+        'wind_speed': [3.3296890258789062, 3.1125760078430176,
+                       2.8954625129699707],
+        'wind_direction': [56.30704879760742, 49.509033203125,
+                           42.71101760864258],
+        'lead_time': [18.5, 19.5, 20.5],
+        'ghi_csi': [0.54492838262211, 0.54492838262211,
+                    0.54492838262211],
+        'ghi': [483.28766462760797, 432.30706082455754, 348.40978082332043],
+        'dni': [107.05566639438575, 93.80106603814811, 96.02668567202704],
+        'dhi': [396.9068763260129, 363.69016543520104, 290.2284911499296],
+        'ghi_clear': [886.8829006521985, 793.3282145157566, 639.3680196043877]
+    }
+    rd_test = pd.DataFrame(data).set_index('valid_time')
+    rd_test.index = rd_test.index.astype("datetime64[ns, UTC]")
+    assert_frame_equal(rd, rd_test, check_dtype=False, rtol=1e-4)
+
+
 def test_hrrr_subhourly_interval():
     latitude = 33.5
     longitude = -86.8
