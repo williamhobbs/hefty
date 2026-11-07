@@ -22,7 +22,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                        attempts=2, hrrr_hour_middle=None,
                        hrrr_coarsen_window=None, priority=None,
                        cams_api_key=None, cams_area=None,
-                       decomp_model=None, output_interval=60):
+                       decomp_model=None, output_interval=60,
+                       remove_gribs=False):
     """
     Get a solar resource forecast for one or several sites from one of several
     NWPs. This function uses Herbie [1]_ and pvlib [2]_.
@@ -107,6 +108,11 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
         the output interval. Default is 60, but shorter intervals (e.g., 5)
         could provide benefit due to improved accuracy in decomposition, at
         the expense of longer computation times. Must be a factor of 60.
+
+    remove_gribs : bool, default False
+        Remove grib and index files after downloading and processing them.
+        Note that directory structure will remain. Does not do anything
+        if priority='dynamical'.
 
     Returns
     -------
@@ -209,7 +215,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             fast=False, attempts=attempts,
             resource_type='solar',
             member=member,
-            hrrr_coarsen_window=hrrr_coarsen_window,)
+            hrrr_coarsen_window=hrrr_coarsen_window,
+            remove_gribs=remove_gribs)
 
     elif model == 'cams':
         if not _has_cdsapi:
@@ -262,6 +269,11 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             dataset = "cams-global-atmospheric-composition-forecasts"
             client.retrieve(dataset, request).download(download_path_file)
             ds = xr.load_dataset(download_path_file)
+
+        if remove_gribs:
+            # Delete the grib file
+            if os.path.exists(download_path_file):
+                os.remove(download_path_file)
 
         # convert wind
         ds = ds.herbie.with_wind()
@@ -738,7 +750,8 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                             lead_time_to_start=0, model='gfs', member=None,
                             attempts=2, hrrr_hour_middle=None,
                             hrrr_coarsen_window=None, priority=None,
-                            decomp_model=None, output_interval=60):
+                            decomp_model=None, output_interval=60,
+                            remove_gribs=False):
     """
     Get a solar resource forecast for one or several sites from one of several
     NWPs. This function uses Herbie [1]_ and pvlib [2]_. This version
@@ -817,6 +830,11 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         the output interval. Default is 60, but shorter intervals (e.g., 5)
         could provide benefit due to improved accuracy in decomposition, at
         the expense of longer computation times. Must be a factor of 60.
+
+    remove_gribs : bool, default False
+        Remove grib and index files after downloading and processing them.
+        Note that directory structure will remain. Does not do anything
+        if priority='dynamical'.
 
     Returns
     -------
@@ -911,6 +929,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
         fast=True, attempts=attempts,
         resource_type='solar',
         member=member, hrrr_coarsen_window=hrrr_coarsen_window,
+        remove_gribs=remove_gribs
     )
 
     # work through sites
@@ -1592,7 +1611,8 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                                 lead_time_to_start=0, model='ifs_ens',
                                 attempts=2, priority=None,
                                 get_ens_temp=False, get_ens_wind=False,
-                                decomp_model='dirindex', output_interval=60):
+                                decomp_model='dirindex', output_interval=60,
+                                remove_gribs=False):
     """
     Get solar resource forecasts for one or several sites using all ensemble
     members. Using `get_solar_forecast_ensemble_subset` may be fast for a
@@ -1666,6 +1686,11 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
         the output interval. Default is 60, but shorter intervals (e.g., 5)
         could provide benefit due to improved accuracy in decomposition, at
         the expense of longer computation times. Must be a factor of 60.
+
+    remove_gribs : bool, default False
+        Remove grib and index files after downloading and processing them.
+        Note that directory structure will remain. Does not do anything
+        if priority='dynamical'.
 
     Returns
     -------
@@ -1743,7 +1768,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
             latitude, longitude, init_date, fxx_range, model,
             search_str, priority, product,
             fast, attempts, resource_type,
-            member)
+            member, remove_gribs=remove_gribs)
         # if needed, get search strings that are remaining
         if not get_ens_temp and not get_ens_wind:
             # use the control member
@@ -1758,7 +1783,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 latitude, longitude, init_date, fxx_range, model,
                 search_str_cust, priority, product_cust,
                 fast, attempts, resource_type,
-                member_cust)
+                member_cust, remove_gribs=remove_gribs)
             # merge
             df_temp = pd.merge(
                 df_temp,
@@ -1931,7 +1956,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 latitude, longitude, init_date, fxx_range, model,
                 search_str, priority, product,
                 fast, attempts, resource_type,
-                member_list[x])
+                member_list[x], remove_gribs=remove_gribs)
             dfs.append(df)
         df_merged = pd.concat(dfs)
         # if needed, get search strings that are remaining
@@ -1948,7 +1973,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 latitude, longitude, init_date, fxx_range, model,
                 search_str_cust, priority, product,
                 fast, attempts, resource_type,
-                member_cust)
+                member_cust, remove_gribs=remove_gribs)
             # merge
             df_merged = pd.merge(
                 df_merged,

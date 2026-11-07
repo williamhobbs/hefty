@@ -5,6 +5,7 @@ import numpy as np
 from herbie import Herbie, FastHerbie
 import xarray as xr
 import time
+import os
 
 
 def get_fcast_definition(model='gfs'):
@@ -912,10 +913,34 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
     return init_date, fxx_range, product, search_str
 
 
+def _grib_remover(herbie_object, search_str):
+    def delete_grib_and_idx(H, search_str):
+        filepath = H.get_localFilePath(search=search_str)
+
+        # Delete the grib file
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+        # delete index files
+        for idx_filename in os.listdir(filepath.parent):
+            # Check if the file ends with the index suffix
+            if idx_filename .endswith(H.IDX_SUFFIX[0]):
+                full_path = os.path.join(filepath.parent, idx_filename)
+                # if file exists, remove it
+                if os.path.isfile(full_path):
+                    os.remove(full_path)
+
+    if isinstance(herbie_object, FastHerbie):
+        for H in herbie_object.objects:
+            delete_grib_and_idx(H, search_str)
+    elif isinstance(herbie_object, Herbie):
+        delete_grib_and_idx(herbie_object, search_str)
+
+
 def _fastherbie_downloader(latitude, longitude, init_date, resource_type,
                            model, fxx_range, FH, search_string_list,
                            ds_dict, j, hrrr_coarsen_window,
-                           overwrite=False):
+                           overwrite=False, remove_gribs=False):
     # try downloading
     FH.download(search_string_list[j])
     ds_dict[j] = FH.xarray(search_string_list[j],
@@ -974,13 +999,17 @@ def _fastherbie_downloader(latitude, longitude, init_date, resource_type,
     # merge - override avoids height conflict between 2m temp
     # and 10m wind
     ds = xr.merge(ds_dict.values(), compat='override')
+    # remove gribs if needed
+    if remove_gribs:
+        _grib_remover(FH, search_string_list[j])
 
     return ds_dict, ds
 
 
 def _herbie_downloader(latitude, longitude, init_date, resource_type,
                        model, product, fxx, member, priority, search_str,
-                       hrrr_coarsen_window, overwrite=False):
+                       hrrr_coarsen_window, overwrite=False,
+                       remove_gribs=False):
     search_string_list = search_str.split('|')
     num_datasets = len(search_string_list)
     if resource_type == 'solar':
@@ -992,7 +1021,7 @@ def _herbie_downloader(latitude, longitude, init_date, resource_type,
             # 100 and 80 m wind; 80m t and p; show up in single datasets
             num_datasets -= 2
     # try downloading
-    ds = Herbie(
+    H = Herbie(
         init_date,
         model=model,
         product=product,
@@ -1000,7 +1029,8 @@ def _herbie_downloader(latitude, longitude, init_date, resource_type,
         member=member,
         priority=priority,
         overwrite=overwrite,
-        ).xarray(search_str)
+        )
+    ds = H.xarray(search_str)
     # address GH#77
     if len(ds) < num_datasets:
         msg = ('Parameters appear to be '
@@ -1043,6 +1073,9 @@ def _herbie_downloader(latitude, longitude, init_date, resource_type,
     # calculate wind speed from u and v components if relevant
     if ('uv' in search_str or 'UV' in search_str):
         ds = ds.herbie.with_wind()
+    # remove gribs if needed
+    if remove_gribs:
+        _grib_remover(H, search_str)
 
     return ds
 
@@ -1060,7 +1093,8 @@ def get_fcast_dataframe(
         latitude, longitude, init_date, fxx_range, model,
         search_str, priority, product=None,
         fast=False, attempts=2, resource_type='solar',
-        member=None, hrrr_coarsen_window=None):
+        member=None, hrrr_coarsen_window=None,
+        remove_gribs=False):
     """
     Function to return a dataframe of forecasted resource data.
 
@@ -1224,7 +1258,7 @@ def get_fcast_dataframe(
                             latitude, longitude, init_date, resource_type,
                             model_herbie, fxx_range, FH, search_string_list,
                             ds_dict, j, hrrr_coarsen_window,
-                            overwrite=False)
+                            overwrite=False, remove_gribs=remove_gribs)
                     else:
                         # after first attempt, set overwrite=True to overwrite
                         # partial files
@@ -1232,7 +1266,7 @@ def get_fcast_dataframe(
                             latitude, longitude, init_date, resource_type,
                             model_herbie, fxx_range, FH, search_string_list,
                             ds_dict, j, hrrr_coarsen_window,
-                            overwrite=True)
+                            overwrite=True, rempve_gribs=remove_gribs)
                 except Exception as e:
                     print(e)
                     if attempts_remaining:
@@ -1258,12 +1292,14 @@ def get_fcast_dataframe(
                         ds = _herbie_downloader(
                             latitude, longitude, init_date, resource_type,
                             model_herbie, product, fxx, member, priority,
-                            search_str, hrrr_coarsen_window, overwrite=False)
+                            search_str, hrrr_coarsen_window, overwrite=False,
+                            remove_gribs=remove_gribs)
                     else:
                         ds = _herbie_downloader(
                             latitude, longitude, init_date, resource_type,
                             model_herbie, product, fxx, member, priority,
-                            search_str, hrrr_coarsen_window, overwrite=True)
+                            search_str, hrrr_coarsen_window, overwrite=True,
+                            remove_gribs=remove_gribs)
                 except Exception as e:
                     print(e)
                     if attempts_remaining:
