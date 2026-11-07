@@ -133,6 +133,8 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
     # minimum cosine of zenith, same default used in pvlib.irradiance
     # functions. Could be an input variable at some point
     min_cos_zenith = 0.065
+    # maximum csi
+    max_csi = 1.3
 
     # variable formatting
     # if lat, lon are single values, convert to lists for pickpoints later
@@ -412,6 +414,9 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
             # calculate clear sky index of ghi, dni
             df['ghi_csi'] = df['ghi'] / df['ghi_clear']
 
+            # clip at max csi
+            df['ghi_csi'] = df['ghi_csi'].clip(upper=max_csi)
+
             # avoid divide by zero issues
             df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
 
@@ -565,6 +570,12 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 df['ghi_csi'] = df['ghi'] / df['ghi_clear']
                 df['dni_csi'] = df['dni'] / df['dni_clear']
                 df['ghi_clear_nwp_csi'] = df['ghi_clear_nwp'] / df['ghi_clear']
+
+                # clip at max csi
+                df['ghi_csi'] = df['ghi_csi'].clip(upper=max_csi)
+                df['dni_csi'] = df['dni_csi'].clip(upper=max_csi)
+                df['ghi_clear_nwp_csi'] = df['ghi_clear_nwp_csi'].clip(upper=max_csi)
+
                 # avoid divide by zero issues
                 df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
                 df.loc[df['dni_clear'] == 0, 'dni_csi'] = 0
@@ -655,6 +666,9 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
                 )
                 df['ghi_csi'] = df['ghi'] / cs['ghi']
                 df['dni_csi'] = df['dni'] / cs['dni']
+                # clip at max csi
+                df['ghi_csi'] = df['ghi_csi'].clip(upper=max_csi)
+                df['dni_csi'] = df['dni_csi'].clip(upper=max_csi)
                 # avoid divide by zero issues
                 df.loc[df['ghi'] == 0, 'ghi_csi'] = 0
                 df.loc[df['dni'] == 0, 'dni_csi'] = 0
@@ -829,6 +843,8 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
     # minimum cosine of zenith, same default used in pvlib.irradiance
     # functions. Could be an input variable at some point
     min_cos_zenith = 0.065
+    # maximum csi
+    max_csi = 1.3
 
     # variable formatting
     # if lat, lon are single values, convert to lists for pickpoints later
@@ -979,6 +995,8 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
 
             # calculate clear sky index of ghi, dni
             df['ghi_csi'] = df['ghi'] / df['ghi_clear']
+            # clip at max csi
+            df['ghi_csi'] = df['ghi_csi'].clip(upper=max_csi)
 
             # avoid divide by zero issues
             df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
@@ -1082,6 +1100,9 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
                 )
                 df['ghi_csi'] = df['ghi'] / cs['ghi']
                 df['dni_csi'] = df['dni'] / cs['dni']
+                # clip at max csi
+                df['ghi_csi'] = df['ghi_csi'].clip(upper=max_csi)
+                df['dni_csi'] = df['dni_csi'].clip(upper=max_csi)
                 # avoid divide by zero issues
                 df.loc[df['ghi'] == 0, 'ghi_csi'] = 0
                 df.loc[df['dni'] == 0, 'dni_csi'] = 0
@@ -1229,6 +1250,8 @@ def get_solar_forecast_ensemble_subset(
     # minimum cosine of zenith, same default used in pvlib.irradiance
     # functions. Could be an input variable at some point
     min_cos_zenith = 0.065
+    # maximum csi
+    max_csi = 1.3
 
     # check model
     if model.casefold() != ('ifs_ens').casefold():
@@ -1355,6 +1378,8 @@ def get_solar_forecast_ensemble_subset(
             # write to df and calculate clear sky index of ghi
             df['ghi_clear'] = [np.nan] + ghi_clear
             df['ghi_csi'] = df['ghi'] / df['ghi_clear']
+            # clip at max csi
+            df['ghi_csi'] = df['ghi_csi'].clip(upper=max_csi)
 
             # avoid divide by zero issues
             df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
@@ -1667,6 +1692,8 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
     # minimum cosine of zenith, same default used in pvlib.irradiance
     # functions. Could be an input variable at some point
     min_cos_zenith = 0.065
+    # maximum csi
+    max_csi = 1.3
 
     # check model
     if (
@@ -1822,6 +1849,8 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # write to df and calculate clear sky index of ghi
                 df['ghi_clear'] = [np.nan] + ghi_clear
                 df['ghi_csi'] = df['ghi'] / df['ghi_clear']
+                # clip at max csi
+                df['ghi_csi'] = df['ghi_csi'].clip(upper=max_csi)
 
                 # avoid divide by zero issues
                 df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
@@ -1999,6 +2028,8 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
                 # write to df and calculate clear sky index of ghi
                 df['ghi_clear'] = [np.nan] + ghi_clear
                 df['ghi_csi'] = df['ghi'] / df['ghi_clear']
+                # clip at max csi
+                df['ghi_csi'] = df['ghi_csi'].clip(upper=max_csi)
 
                 # avoid divide by zero issues
                 df.loc[df['ghi_clear'] == 0, 'ghi_csi'] = 0
