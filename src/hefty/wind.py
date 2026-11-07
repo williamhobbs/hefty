@@ -9,7 +9,8 @@ import warnings
 def get_wind_forecast(latitude, longitude, init_date, run_length,
                       lead_time_to_start=0, model='gfs', member=None,
                       attempts=2, hrrr_hour_middle=None,
-                      hrrr_coarsen_window=None, priority=None):
+                      hrrr_coarsen_window=None, priority=None,
+                      remove_gribs=False):
     """
     Get a wind resource forecast for one or several sites from one of several
     NWPs. This function uses Herbie [1]_ and pvlib [2]_.
@@ -76,6 +77,11 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
         List of model sources to get the data in the order of download
         priority, or string for a single source. See Herbie docs.
         Typical values would be 'aws' or 'google'.
+
+    remove_gribs : bool, default False
+        Remove grib and index files after downloading and processing them.
+        Note that directory structure will remain. Does not do anything
+        if priority='dynamical'.
 
     Returns
     -------
@@ -149,7 +155,8 @@ def get_wind_forecast(latitude, longitude, init_date, run_length,
         latitude, longitude, date, fxx_range, model,
         search_str, priority, product,
         fast, attempts, resource_type,
-        member, hrrr_coarsen_window=hrrr_coarsen_window)
+        member, hrrr_coarsen_window=hrrr_coarsen_window,
+        remove_gribs=remove_gribs)
 
     # work through sites
     dfs = {}  # empty list of dataframes
