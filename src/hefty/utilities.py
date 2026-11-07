@@ -913,6 +913,30 @@ def model_input_formatter(init_date, run_length, lead_time_to_start=0,
     return init_date, fxx_range, product, search_str
 
 
+def _grib_remover(herbie_object, search_str):
+    def delete_grib_and_idx(H, search_str):
+        filepath = H.get_localFilePath(search=search_str)
+
+        # Delete the grib file
+        if os.path.exists(filepath):
+            os.remove(filepath)
+
+        # delete index files
+        for idx_filename in os.listdir(filepath.parent):
+            # Check if the file ends with the index suffix
+            if idx_filename .endswith(H.IDX_SUFFIX[0]):
+                full_path = os.path.join(filepath.parent, idx_filename)
+                # if file exists, remove it
+                if os.path.isfile(full_path):
+                    os.remove(full_path)
+
+    if isinstance(herbie_object, FastHerbie):
+        for H in herbie_object.objects:
+            delete_grib_and_idx(H, search_str)
+    elif isinstance(herbie_object, Herbie):
+        delete_grib_and_idx(herbie_object, search_str)
+
+
 def _fastherbie_downloader(latitude, longitude, init_date, resource_type,
                            model, fxx_range, FH, search_string_list,
                            ds_dict, j, hrrr_coarsen_window,
@@ -977,7 +1001,7 @@ def _fastherbie_downloader(latitude, longitude, init_date, resource_type,
     ds = xr.merge(ds_dict.values(), compat='override')
     # remove gribs if needed
     if remove_gribs:
-        grib_remover(FH, search_string_list[j])
+        _grib_remover(FH, search_string_list[j])
 
     return ds_dict, ds
 
@@ -1051,7 +1075,7 @@ def _herbie_downloader(latitude, longitude, init_date, resource_type,
         ds = ds.herbie.with_wind()
     # remove gribs if needed
     if remove_gribs:
-        grib_remover(H, search_str)
+        _grib_remover(H, search_str)
 
     return ds
 
@@ -1598,28 +1622,3 @@ def get_fcast_dataframe(
         df = df[df.columns.intersection(keep_cols)]
 
     return df
-
-
-def grib_remover(herbie_object, search_str):
-
-    def delete_grib_and_idx(H, search_str):
-        filepath = H.get_localFilePath(search=search_str)
-
-        # Delete the grib file
-        if os.path.exists(filepath):
-            os.remove(filepath)
-
-        # delete index files
-        for idx_filename in os.listdir(filepath.parent):
-            # Check if the file ends with the index suffix
-            if idx_filename .endswith(H.IDX_SUFFIX[0]):
-                full_path = os.path.join(filepath.parent, idx_filename)
-                # if file exists, remove it
-                if os.path.isfile(full_path):
-                    os.remove(full_path)
-
-    if isinstance(herbie_object, FastHerbie):
-        for H in herbie_object.objects:
-            delete_grib_and_idx(H, search_str)
-    elif isinstance(herbie_object, Herbie):
-        delete_grib_and_idx(herbie_object, search_str)
