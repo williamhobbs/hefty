@@ -110,8 +110,8 @@ The [examples](examples) folder contains several example Jupyter notebooks.
 - [ensemble_example.ipynb](examples/ensemble_example.ipynb): Examples of multi-member ensembles with IFS, AIFS, and GEFS.
 - [wind_example.ipynb](examples/wind_example.ipynb): A basic wind resource forecast example using a few models, including converting the data to a format compatible with `windpowerlib`*.
 - [erbs_vs_dirindex.ipynb](examples/erbs_vs_dirindex.ipynb): A comparison of Erbs and DIRINDEX irradiance decomposition models using SURFRAD measurements.
-- [dynamical_example.ipynb](examples\dynamical_example.ipynb): Examples using [dynamical.org](https://dynamical.org) as a data source (`priority`), which can be about 10X faster than other options, but with just a few limitations. 
-- [subhourly_output_interval.ipynb](examples\subhourly_output_interval.ipynb): An example using `output_interval` less than 60 minutes to show potential benefits of sub-hourly interpolation.
+- [dynamical_example.ipynb](examples/dynamical_example.ipynb): Examples using [dynamical.org](https://dynamical.org) as a data source (`priority`), which can be about 10X faster than other options, but with just a few limitations. 
+- [subhourly_output_interval.ipynb](examples/subhourly_output_interval.ipynb): An example using `output_interval` less than 60 minutes to show potential benefits of sub-hourly interpolation.
 
 \* https://github.com/wind-python/windpowerlib/
 
