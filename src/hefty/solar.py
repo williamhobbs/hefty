@@ -140,7 +140,7 @@ def get_solar_forecast(latitude, longitude, init_date, run_length,
     # functions. Could be an input variable at some point
     min_cos_zenith = 0.065
     # maximum csi
-    max_csi = 1.3
+    max_csi = 1.5
 
     # variable formatting
     # if lat, lon are single values, convert to lists for pickpoints later
@@ -862,7 +862,7 @@ def get_solar_forecast_fast(latitude, longitude, init_date, run_length,
     # functions. Could be an input variable at some point
     min_cos_zenith = 0.065
     # maximum csi
-    max_csi = 1.3
+    max_csi = 1.5
 
     # variable formatting
     # if lat, lon are single values, convert to lists for pickpoints later
@@ -1270,7 +1270,7 @@ def get_solar_forecast_ensemble_subset(
     # functions. Could be an input variable at some point
     min_cos_zenith = 0.065
     # maximum csi
-    max_csi = 1.3
+    max_csi = 1.5
 
     # check model
     if model.casefold() != ('ifs_ens').casefold():
@@ -1718,7 +1718,7 @@ def get_solar_forecast_ensemble(latitude, longitude, init_date, run_length,
     # functions. Could be an input variable at some point
     min_cos_zenith = 0.065
     # maximum csi
-    max_csi = 1.3
+    max_csi = 1.5
 
     # check model
     if (
