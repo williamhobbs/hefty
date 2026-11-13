@@ -11,7 +11,7 @@ This repository currently includes solar and wind tools, but may expand one day 
 
 A detailed pvlib-based PV weather-to-power model is included in [pv_model.py](src/hefty/pv_model.py), `model_pv_power()`.
 
-The [custom.py](src/hefty/custom.py) module is intended to help with getting forecasts of "custom" weather parameters, not necessarily specific to wind or solar, which migh be useful for load forecasting.
+The [custom.py](src/hefty/custom.py) module is intended to help with getting forecasts of "custom" weather parameters, not necessarily specific to wind or solar, which migh be useful for load forecasting. Note that this function does not have as many features as the solar- and wind-specific functions.
 
 _*CAMS IFS is only available via `hefty.solar.get_solar_forecast()`, and it requires `cdsapi` to be installed and the user needs an API key (see https://ads.atmosphere.copernicus.eu/how-to-api and the [CAMS example notebook](examples/cams_example.ipynb))._
 
@@ -35,16 +35,20 @@ A virtual environment is strongly recommended. You can install from PyPi with:
 pip install hefty
 ```
 
+For optional dependencies to access ECMWF CAMS or use [dynamical.org](https://dynamical.org/catalog/) as a data source, you can install with:
+
+```
+pip install hefty[all]
+```
+
+or use `pip install hefty[cams]` or `pip install hefty[dynamical]` for individual dependencies (`cdsapi` for CAMS and `dynamical-catalog` and `cartopy` for dynamical.org). 
+
+> **Note that to access CAMS, you need an API key, see https://ads.atmosphere.copernicus.eu/how-to-api.**
+
 To run the example Jupyter notebooks, you also need `jupyter`:
 
 ```
 pip install jupyter
-```
-
-If you want to use ECMWF CAMS, you also need `cdsapi` (and an API key, see https://ads.atmosphere.copernicus.eu/how-to-api):
-
-```
-pip install cdsapi
 ```
 
 ## Quick example
@@ -205,9 +209,9 @@ Model delays are more than just a fixed time: they can vary by lead time and by 
 Delays calculated in `adjust_forecast_datetimes` are based on experiments in this notebook [docs/forecast_model_delays.ipynb](docs/forecast_model_delays.ipynb) (or see this markdown version, [docs/forecast_model_delays.md](docs/forecast_model_delays.md)), documentation published by ECMWF, and this cool dashboard by dynamical.org https://dynamical.org/status/.
 
 ## Local disk space
-The current version of hefty keeps copies of downloaded grib files on your local storage. This can result in a large amount of disk space being used up. Future versions of hefty may change this (see [issue #70](https://github.com/williamhobbs/hefty/issues/70)), but for now, users may need to monitor storage space and manually delete files if needed. 
+hefty keeps copies of downloaded grib files on your local storage (unless you use `priority='dynamical'`), using the directory configured by Herbie for storing files. See Herbie documentation here for details https://herbie.readthedocs.io/en/stable/user_guide/configure.html. The default `~\data` folder on Windows is `C:\Users\[username]\data`. 
 
-hefty uses the directory configured by Herbie for storing files. See Herbie documentation here for details https://herbie.readthedocs.io/en/stable/user_guide/configure.html. The default `~\data` folder on Windows is `C:\Users\[username]\data`.
+This can take up several GB of disk space for large datasets, e.g., for IFS Ensemble forecasts. To delete files immediately after processing, use the `remove_gribs=True`. 
 
 ## Troubleshooting
 
@@ -276,7 +280,7 @@ A possible example attribution and citation for the CAMS version of IFS:
 
 
 ## References
-This project uses several Python packages, including pvlib, an open-source solar PV modeling package [1, 2], and Herbie [3, 4], a package for accessing weather forecast data from NOAA. `pv_model.py` (with the `model_pv_power()` function used here) comes from [5] which leverages some functions from [6].
+This project uses several Python packages, including pvlib, an open-source solar PV modeling package [1, 2], and Herbie [3, 4], a package for accessing weather forecast data from NOAA. `pv_model.py` (with the `model_pv_power()` function used here) comes from [5] which leverages some functions from [6]. 
 
 <img src="images/pvlib_powered_logo_horiz.png" width="200"/>
 
