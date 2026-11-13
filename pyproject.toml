@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hefty"
-version = "0.3.2"
+version = "0.4.0"
 description = "Some (relatively) lightweight short-term energy forecasting tools for solar, wind, and load."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,9 +23,29 @@ dependencies = [
     "pvlib >= 0.16.1",
     "pandas >= 3.0.0",
     "urllib3 >= 2.6.0",
+    "numpy",
+    "xarray",
 ]
+
 license = "BSD-3-Clause"
 license-files = ["LICENSE*"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "dotenv",
+]
+
+[project.optional-dependencies]
+dynamical = [
+    "dynamical-catalog",
+    "cartopy",
+]
+cams = [
+    "cdsapi",
+]
+all = ["hefty[cams,dynamical]"]
 
 [project.urls]
 Homepage = "https://github.com/williamhobbs/hefty"
