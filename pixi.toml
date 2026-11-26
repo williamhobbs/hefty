@@ -1,0 +1,44 @@
+[workspace]
+name = "hefty"
+description = "Some (relatively) lightweight short-term energy forecasting tools for solar, wind, and load."
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-arm64", "win-64"]
+
+[dependencies]
+# <3.15: with Python 3.15, pixi also installs pandas from PyPI on win-64,
+# leaving two pandas copies next to the conda one (checked 2026-11-26).
+python = "<3.15"
+
+cartopy = "*"
+cdsapi = "*"
+herbie-data = "*"
+scikit-learn = "*"  # herbie's pick_points (replaces the herbie-data[scikit-learn] extra)
+pvlib = "*"
+pandas = "*"
+urllib3 = "*"
+numpy = "*"
+xarray = "*"
+
+# testing dependencies
+pytest = "*"
+pytest-cov = "*"
+python-dotenv = "*"  # tests load CAMS_API_KEY from .env
+
+# examples.dependencies
+matplotlib-base = "*"
+ipykernel = "*"
+
+# advanced example dependencies, e.g. docs/forecast_model_delays.ipynb
+boto3 = "*"
+
+[pypi-dependencies]
+# hefty itself is not on conda-forge; install from the local source
+hefty = { path = ".", editable = true }
+# use zarr format as add-on to herbie
+dynamical-catalog = "*"
+
+[tasks]
+test = "pytest tests"
+
+[environments]
+hefty = ["default"]
